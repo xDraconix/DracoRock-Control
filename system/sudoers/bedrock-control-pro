@@ -2,3 +2,4 @@ www-data ALL=(root) NOPASSWD: /usr/local/sbin/bedrock-panel-control, /usr/local/
 www-data ALL=(root) NOPASSWD: /usr/local/sbin/bedrock-panel-self-update-control start, /usr/local/sbin/bedrock-panel-self-update-control channel stable, /usr/local/sbin/bedrock-panel-self-update-control channel test
 # Monitoring history is read-only; sampling is only performed by the root-owned timer.
 www-data ALL=(root) NOPASSWD: /usr/local/sbin/bedrock-monitor-manager history 1h, /usr/local/sbin/bedrock-monitor-manager history 6h, /usr/local/sbin/bedrock-monitor-manager history 24h, /usr/local/sbin/bedrock-monitor-manager history 7d, /usr/local/sbin/bedrock-monitor-manager history 30d
+www-data ALL=(root) NOPASSWD: /usr/local/sbin/dracorock-backup-manager list, /usr/local/sbin/dracorock-backup-manager download, /usr/local/sbin/dracorock-backup-manager delete

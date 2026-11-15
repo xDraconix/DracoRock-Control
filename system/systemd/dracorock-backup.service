@@ -1,0 +1,8 @@
+[Unit]
+Description=Queue a DracoRock scheduled Minecraft backup
+After=mcbedrock.service
+
+[Service]
+Type=oneshot
+ExecCondition=/usr/bin/python3 -c "import json, subprocess, sys; result = subprocess.run(['/usr/local/sbin/bedrock-console-manager', 'online'], capture_output=True, text=True); sys.exit(0 if result.returncode == 0 and json.loads(result.stdout).get('count') == 0 else 1)"
+ExecStart=/usr/local/sbin/bedrock-panel-control backup

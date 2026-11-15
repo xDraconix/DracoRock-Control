@@ -15,7 +15,7 @@ from pathlib import Path
 ALLOWED_SBIN = frozenset({
     'bedrock-addon-manager', 'bedrock-config-access',
     'bedrock-console-manager', 'bedrock-nethernet-check',
-    'bedrock-monitor-manager',
+    'bedrock-monitor-manager', 'dracorock-backup-manager',
     'bedrock-panel-control', 'bedrock-panel-self-update-control',
     'bedrock-panel-self-update-worker', 'bedrock-panel-service-worker',
     'bedrock-panel-update-worker', 'bedrock-properties-manager',
@@ -33,6 +33,10 @@ FIXED = {
         ('/etc/systemd/system/bedrock-monitor.service', 0o644),
     'system/systemd/bedrock-monitor.timer':
         ('/etc/systemd/system/bedrock-monitor.timer', 0o644),
+    'system/systemd/dracorock-backup.service':
+        ('/etc/systemd/system/dracorock-backup.service', 0o644),
+    'system/systemd/dracorock-backup.timer':
+        ('/etc/systemd/system/dracorock-backup.timer', 0o644),
     'system/systemd/bedrock-panel-self-update.service':
         ('/etc/systemd/system/bedrock-panel-self-update.service', 0o644),
     'system/sudoers/bedrock-control-pro':
@@ -47,6 +51,7 @@ FIXED = {
         ('/etc/tmpfiles.d/bedrock-world-exports.conf', 0o644),
 }
 REQUIRED = {
+    'system/usr-local-sbin/dracorock-backup-manager',
     'system/usr-local-sbin/bedrock-world-manager',
     'system/usr-local-sbin/bedrock-panel-self-update-worker',
     'system/usr-local-bin/bedrock-panel-apply-release',

@@ -553,3 +553,7 @@ footer{border-top:1px solid #32494d;padding-top:20px;color:#92a9ad}
  padding:0;color:#b2def2;font-size:12px;text-decoration:underline;text-underline-offset:3px;
 }
 #overview .bedrock-update-action[hidden]{display:none}
+#backups .backuplist > div{flex-wrap:wrap;align-items:center;gap:.75rem}
+#backups .backup-entry-info{min-width:0;overflow-wrap:anywhere}
+#backups .backup-entry-info small{display:block;color:var(--muted);margin-top:.2rem}
+#backups .backup-entry-actions{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}

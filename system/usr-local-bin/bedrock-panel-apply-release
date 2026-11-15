@@ -72,11 +72,13 @@ def validated_system_plan(installer):
         require(isinstance(src,str) and src.startswith('system/') and '..' not in Path(src).parts,
                 'Ungültiger System-Quelldateipfad')
         require(isinstance(dst,str) and dst.startswith(('/usr/local/bin/bedrock-panel-',
-                  '/usr/local/sbin/bedrock-','/etc/systemd/system/bedrock-panel-self-update.service',
+                  '/usr/local/sbin/bedrock-', '/usr/local/sbin/dracorock-backup-manager','/etc/systemd/system/bedrock-panel-self-update.service',
                   '/etc/systemd/system/bedrock-monitor.service',
                   '/etc/systemd/system/bedrock-monitor.timer',
                   '/etc/sudoers.d/bedrock-control-pro','/etc/apache2/sites-available/bedrock-control-pro.conf',
                   '/etc/tmpfiles.d/bedrock-')) or
+                dst in ('/etc/systemd/system/dracorock-backup.service',
+                        '/etc/systemd/system/dracorock-backup.timer') or
                 re.fullmatch(r'/etc/php/\d+\.\d+/apache2/conf\.d/99-bedrock-addon-upload\.ini',dst) is not None,
                 'System-Ziel außerhalb freigegebener Pfade')
         require(dst not in targets, 'Doppeltes Systemdatei-Ziel')

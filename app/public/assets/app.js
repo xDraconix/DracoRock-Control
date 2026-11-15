@@ -386,7 +386,65 @@ $('monitorWindow').addEventListener('change',e=>{monitoringWindow=e.target.value
 window.addEventListener('resize',()=>{if(!$('monitor').hidden){redrawMonitoring();monitorTooltip()}});
 setInterval(()=>{if(!$('app').hidden&&!$('monitor').hidden)loadMonitoring()},60000);
 
-async function backups(){try{const d=await api('backups');const el=$('backupList');el.replaceChildren();if(!d.files.length){el.textContent='Noch keine Backups gefunden.';return}for(const f of d.files){const row=document.createElement('div'),a=document.createElement('span'),b=document.createElement('span');a.textContent=f.name;b.textContent=fmt(f.size)+' · '+f.date;row.append(a,b);el.append(row)}}catch(e){showNotice(e.message,true)}}async function logs(){try{const d=await api('logs&type='+encodeURIComponent($('logType').value));txt('logOutput',d.logs||'Keine Einträge.')}catch(e){showNotice(e.message,true)}}function refreshAll(){status();backups();logs();loadDashboardAlerts();loadBedrockUpdate()}async function action(name){
+function backupSize(bytes){
+ if(bytes>=1073741824)return (bytes/1073741824).toFixed(2)+' GiB';
+ if(bytes>=1048576)return (bytes/1048576).toFixed(1)+' MiB';
+ if(bytes>=1024)return (bytes/1024).toFixed(1)+' KiB';
+ return bytes+' B';
+}
+async function deleteBackup(file,button){
+ if(!window.confirm('Backup „'+file.name+'“ endgültig löschen?'))return;
+ button.disabled=true;
+ try{
+  await api('backup-delete',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({id:file.id})});
+  await backups();
+  showNotice('Backup gelöscht.');
+ }catch(error){
+  showNotice(error.message,true);
+  button.disabled=false;
+ }
+}
+function renderBackupList(id,files){
+ const list=$(id);
+ list.replaceChildren();
+ if(!files.length){list.textContent='Noch keine Backups vorhanden.';return}
+ for(const file of files){
+  const row=document.createElement('div'), info=document.createElement('span'), detail=document.createElement('small');
+  const actions=document.createElement('span'), link=document.createElement('button'), remove=document.createElement('button');
+  info.className='backup-entry-info';
+  info.textContent=file.name;
+  detail.textContent=backupSize(file.size)+' · '+file.date;
+  info.append(detail);
+  actions.className='backup-entry-actions';
+  link.className='secondary';
+  link.textContent='ZIP herunterladen';
+  link.type='button';
+  link.addEventListener('click',()=>window.location.assign('?api=backup-download&id='+encodeURIComponent(file.id)));
+  link.setAttribute('aria-label','ZIP herunterladen: '+file.name);
+  remove.className='secondary';
+  remove.type='button';
+  remove.textContent='Löschen';
+  remove.setAttribute('aria-label','Backup löschen: '+file.name);
+  remove.addEventListener('click',()=>deleteBackup(file,remove));
+  actions.append(link,remove);
+  row.append(info,actions);
+  list.append(row);
+ }
+}
+async function backups(){
+ try{
+  const data=await api('backups');
+  renderBackupList('backupWorldList',data.worlds);
+  renderBackupList('backupServerList',data.server);
+  txt('backupStorage','Gesamter Backup-Speicher: '+backupSize(data.total_bytes));
+ }catch(e){
+  txt('backupStorage','Gesamter Backup-Speicher konnte nicht geladen werden.');
+  txt('backupWorldList',e.message);
+  txt('backupServerList',e.message);
+  showNotice(e.message,true);
+ }
+}
+async function logs(){try{const d=await api('logs&type='+encodeURIComponent($('logType').value));txt('logOutput',d.logs||'Keine Einträge.')}catch(e){showNotice(e.message,true)}}function refreshAll(){status();backups();logs();loadDashboardAlerts();loadBedrockUpdate()}async function action(name){
  if(busy)return;
  const labels={start:'Server starten',stop:'Server stoppen',restart:'Server neu starten',update:'Update starten (Server wird ggf. neu gestartet)',backup:'Backup erstellen (kurze Unterbrechung möglich)'};
  if(!confirm(labels[name]+'?'))return;
