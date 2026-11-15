@@ -557,3 +557,12 @@ footer{border-top:1px solid #32494d;padding-top:20px;color:#92a9ad}
 #backups .backup-entry-info{min-width:0;overflow-wrap:anywhere}
 #backups .backup-entry-info small{display:block;color:var(--muted);margin-top:.2rem}
 #backups .backup-entry-actions{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
+
+#consoleOutput{white-space:pre-wrap;overflow-wrap:anywhere}
+#consoleOutput .console-level-error{color:#ff9095}
+#consoleOutput .console-level-warning{color:#ffb878}
+#consoleOutput .console-level-info{color:#f3db87}
+#consoleOutput .console-level-debug{color:#9dbcf0}
+.monitor-player-history{max-height:28rem;overflow:auto}
+.monitor-player-history table{width:100%;border-collapse:collapse}
+.monitor-player-history th,.monitor-player-history td{text-align:left;padding:.65rem;border-bottom:1px solid var(--dr-frame);white-space:nowrap}

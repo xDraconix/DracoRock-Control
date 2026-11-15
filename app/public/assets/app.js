@@ -360,7 +360,42 @@ async function loadDashboardAlerts(){
 }
 $('dashboardAlertsDetail').addEventListener('click',()=>document.querySelector('[data-tab="monitor"]').click());
 setInterval(()=>{if(!$('app').hidden&&!$('overview').hidden)loadDashboardAlerts()},60000);
+let playerHistoryBusy=false;
+const playerHistoryDate=new Intl.DateTimeFormat('de-DE',{
+ dateStyle:'short',timeStyle:'short',timeZone:'Europe/Berlin'
+});
+async function loadPlayerHistory(){
+ if(playerHistoryBusy)return;
+ playerHistoryBusy=true;
+ const table=$('playerHistoryTable'),body=$('playerHistoryRows');
+ try{
+  const data=await api('monitor-player-history');
+  const content=document.createDocumentFragment();
+  for(const session of data.sessions){
+   const row=document.createElement('tr');
+   const name=document.createElement('th');
+   name.scope='row';
+   name.textContent=session.name;
+   row.append(name);
+   for(const ts of [session.first_seen,session.last_seen]){
+    const cell=document.createElement('td');
+    cell.textContent=playerHistoryDate.format(ts*1000);
+    row.append(cell);
+   }
+   content.append(row);
+  }
+  body.replaceChildren(content);
+  table.hidden=!data.sessions.length;
+  const status=data.sessions.length?data.sessions.length+' beobachtete Abschnitte':'Keine Spieler im erfassten Zeitraum beobachtet.';
+  txt('playerHistoryState',data.first_sample===null?'Warte auf die erste Messung.':
+      status+' · Messdaten im Zeitfenster seit '+playerHistoryDate.format(data.first_sample*1000)+' (Berlin)');
+ }catch(e){
+  table.hidden=true;
+  txt('playerHistoryState',e.message);
+ }finally{playerHistoryBusy=false}
+}
 async function loadMonitoring(){
+ loadPlayerHistory();
  if(monitoringBusy)return;
  monitoringBusy=true;txt('monitorState','Lade historische Messwerte …');
  try{
@@ -612,8 +647,59 @@ $('reloadAddons').addEventListener('click',loadAddons);
 $('addonUploadForm').addEventListener('submit',async e=>{e.preventDefault();const file=$('addonFile').files[0];if(!file)return;if(file.size>268435456){showNotice('Maximal 256 MB',true);return}if(!confirm('Add-on installieren? Der Minecraft-Dienst muss gestoppt sein.'))return;const data=new FormData();data.append('addon',file);try{const r=await api('addon-upload',{method:'POST',headers:{'X-CSRF-Token':csrf},body:data});showNotice(r.message||'Installiert');$('addonUploadForm').reset();loadAddons()}catch(e){showNotice(e.message,true)}});
 
 let consoleBusy=false;
-async function loadConsole(){if(consoleBusy)return;consoleBusy=true;try{const d=await api('console-tail');txt('consoleOutput',d.logs||'Keine Konsolenausgabe verfügbar.')}catch(e){txt('consoleOutput','Konsole nicht verfügbar: '+e.message)}finally{consoleBusy=false}}
+const consoleLevelPattern=/^\[(?:(?:\d{4}-\d{2}-\d{2}) [\d:.]+ )?(FATAL|ERROR|WARN(?:ING)?|INFO|DEBUG|TRACE)\]/i;
+const consoleLevelClasses={FATAL:'error',ERROR:'error',WARN:'warning',WARNING:'warning',INFO:'info',DEBUG:'debug',TRACE:'debug'};
+
+function consoleEntries(logs,columns){
+ const entries=[];
+ let current=null;
+ for(const line of logs.split(/\r?\n/)){
+  const level=consoleLevelPattern.exec(line);
+  // SCREEN hardcopy inserts a newline after each full terminal row.
+  // Only join full rows within a log entry and retain explicit boundaries.
+  const startsEntry=/^\[/.test(line)||/^\s*#{3,}/.test(line);
+  if(current?.level && columns>0 && current.lastWidth===columns && line.trim() && !startsEntry){
+   current.text+=line;
+   current.lastWidth=Array.from(line).length;
+  }else{
+   current={text:line,level:level?consoleLevelClasses[level[1].toUpperCase()]:null,lastWidth:Array.from(line).length};
+   entries.push(current);
+  }
+ }
+ return entries;
+}
+
+function renderConsole(logs,columns){
+ const output=$('consoleOutput');
+ const atBottom=output.scrollTop+output.clientHeight>=output.scrollHeight-4;
+ const content=document.createDocumentFragment();
+ for(const [index,entry] of consoleEntries(logs,columns).entries()){
+  if(index)content.append('\n');
+  const line=document.createElement('span');
+  if(entry.level)line.className='console-level-'+entry.level;
+  line.textContent=entry.text;
+  content.append(line);
+ }
+ output.replaceChildren(content);
+ if(atBottom)output.scrollTop=output.scrollHeight;
+}
+
+async function loadConsole(){
+ if(consoleBusy)return;
+ consoleBusy=true;
+ try{
+  const data=await api('console-tail');
+  renderConsole(data.logs||'Keine Konsolenausgabe verfügbar.',data.columns);
+ }catch(e){
+  txt('consoleOutput','Konsole nicht verfügbar: '+e.message);
+ }finally{consoleBusy=false}
+}
 async function consoleSend(command,value=''){try{const d=await api('console-send',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({command,value})});showNotice(d.message||'Befehl gesendet');setTimeout(loadConsole,600)}catch(e){showNotice(e.message,true)}}
+$('consoleCommandForm').addEventListener('submit',async event=>{
+ event.preventDefault();
+ const input=$('consoleCommand');
+ if(input.value.trim())await consoleSend('minecraft',input.value);
+});
 $('reloadConsole').addEventListener('click',loadConsole);
 $('consoleList').addEventListener('click',()=>consoleSend('list'));
 $('consoleDay').addEventListener('click',()=>consoleSend('day'));
