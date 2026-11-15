@@ -64,17 +64,36 @@ with patch.object(mod,'command',return_value=Result(
 with patch.object(mod,'command',return_value=Result('ActiveState=inactive\nCPUUsageNSec=[not set]\nMemoryCurrent=[not set]\n')):
     assert mod.service_snapshot()==(False,None,None)
 with patch.object(mod,'command',return_value=Result(json.dumps({'count':3,'online':True}))):
-    assert mod.online_count()==3
+    assert mod.online_roster()==(3,None)
 with patch.object(mod,'command',return_value=Result('',1)) as failed, patch.object(mod.time,'sleep') as sleep:
-    assert mod.online_count() is None
+    assert mod.online_roster()==(None,None)
     assert failed.call_count==2
     sleep.assert_called_once()
 with patch.object(mod,'command',side_effect=[Result('',1),Result(json.dumps({'count':2,'online':True}))]) as retried, patch.object(mod.time,'sleep'):
-    assert mod.online_count()==2
+    assert mod.online_roster()==(2,None)
     assert retried.call_count==2
-with patch.object(mod,'command',return_value=Result(json.dumps({'count':0,'online':True}))) as succeeded:
-    assert mod.online_count()==0
+with patch.object(mod,'command',return_value=Result(json.dumps({'count':0,'online':True,'players':[]}))) as succeeded:
+    assert mod.online_roster()==(0,[])
     assert succeeded.call_count==1
+with patch.object(mod,'command',return_value=Result(json.dumps({'count':1,'online':True,'players':['Test Builder']}))):
+    assert mod.online_roster()==(1,['Test Builder'])
+
+with tempfile.TemporaryDirectory() as tmp:
+    mod.DB_DIR=pathlib.Path(tmp)/'monitor'
+    mod.DB_FILE=mod.DB_DIR/'monitoring.sqlite3'
+    with mod.storage() as db:
+        mod.take_sample(db,1000,True,None,None,1,['Test Builder'])
+        mod.take_sample(db,1060,True,None,None,1,['Test Builder'])
+        mod.take_sample(db,1120,True,None,None,None)
+        mod.take_sample(db,1180,True,None,None,1,['Test Builder'])
+        mod.take_sample(db,1240,True,None,None,0,[])
+        result=mod.player_history(db,1240)
+        assert result['first_sample']==1000 and result['last_sample']==1240
+        assert [(row['first_seen'],row['last_seen']) for row in result['sessions']]==[(1180,1180),(1000,1060)]
+        mod.take_sample(db,mod.PLAYER_RETENTION+1240,False,None,None,0,[])
+        assert mod.player_history(db,mod.PLAYER_RETENTION+1240)['sessions']==[]
+        assert db.execute('SELECT COUNT(*) FROM player_observations').fetchone()==(0,)
+        assert db.execute('SELECT COUNT(*) FROM samples').fetchone()==(6,)
 with tempfile.TemporaryDirectory() as tmp:
     mod.CGROUP_ROOT=pathlib.Path(tmp)
     group=mod.CGROUP_ROOT/'system.slice'/'mcbedrock.service'

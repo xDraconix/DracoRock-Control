@@ -7,6 +7,7 @@ through the panel's existing authenticated/sudo-controlled API.
 import json
 import os
 import pathlib
+import re
 import sqlite3
 import stat
 import subprocess
@@ -18,6 +19,8 @@ DB_FILE = DB_DIR / 'monitoring.sqlite3'
 UNIT = 'mcbedrock.service'
 CGROUP_ROOT = pathlib.Path('/sys/fs/cgroup')
 RETENTION = 30 * 86400
+PLAYER_RETENTION = 48 * 3600
+GAMERTAG = re.compile(r"[A-Za-z0-9_ .-]{1,32}\Z")
 WINDOWS = {'1h': 3600, '6h': 21600, '24h': 86400, '7d': 604800, '30d': 2592000}
 
 def command(*args, timeout=8):
@@ -41,6 +44,9 @@ def storage():
                'ts INTEGER PRIMARY KEY, online INTEGER NOT NULL, '
                'cpu_ns INTEGER, cpu_pct REAL, ram_bytes INTEGER, players INTEGER)')
     db.execute('CREATE INDEX IF NOT EXISTS idx_samples_ts ON samples(ts)')
+    db.execute('CREATE TABLE IF NOT EXISTS roster_samples (ts INTEGER PRIMARY KEY)')
+    db.execute('CREATE TABLE IF NOT EXISTS player_observations (ts INTEGER NOT NULL, '
+               'name TEXT NOT NULL, PRIMARY KEY(ts,name)) WITHOUT ROWID')
     db.commit()
     return db
 
@@ -95,7 +101,7 @@ def service_snapshot():
         ram_bytes = cgroup_value(group, 'ram_bytes')
     return True, cpu_ns, ram_bytes
 
-def online_count():
+def online_roster():
     """Best-effort fresh Bedrock count; transient SCREEN conflicts are not zero.
 
     A separate panel request can overlap the timer's SCREEN query. Retry once
@@ -108,14 +114,20 @@ def online_count():
                 parsed = json.loads(r.stdout)
                 count = parsed.get('count')
                 if type(count) is int and 0 <= count <= 1000 and parsed.get('online') is True:
-                    return count
+                    names = parsed.get('players')
+                    if (isinstance(names,list) and len(names)==count
+                            and all(isinstance(name,str) and GAMERTAG.fullmatch(name)
+                                    and name.strip()==name for name in names)
+                            and len(set(names))==count):
+                        return count, names
+                    return count, None
         except (ValueError, AttributeError, TypeError, subprocess.TimeoutExpired):
             pass
         if attempt == 0:
             time.sleep(0.65)
-    return None
+    return None, None
 
-def take_sample(db, now, online, cpu_ns, ram_bytes, players):
+def take_sample(db, now, online, cpu_ns, ram_bytes, players, names=None):
     """Append a sample with a service-CPU delta; 100%=one fully loaded core."""
     previous = db.execute('SELECT ts,cpu_ns FROM samples ORDER BY ts DESC LIMIT 1').fetchone()
     cpu_pct = None
@@ -131,6 +143,12 @@ def take_sample(db, now, online, cpu_ns, ram_bytes, players):
                    ' VALUES (?,?,?,?,?,?)',
                    (now, int(online), cpu_ns, cpu_pct, ram_bytes, players))
         db.execute('DELETE FROM samples WHERE ts < ?', (now - RETENTION,))
+        db.execute('DELETE FROM player_observations WHERE ts <= ? OR ts = ?', (now - PLAYER_RETENTION, now))
+        db.execute('DELETE FROM roster_samples WHERE ts <= ? OR ts = ?', (now - PLAYER_RETENTION, now))
+        if names is not None:
+            db.execute('INSERT INTO roster_samples (ts) VALUES (?)', (now,))
+            db.executemany('INSERT INTO player_observations (ts,name) VALUES (?,?)',
+                           ((now, name) for name in names))
     return {'ts':now,'online':bool(online),'cpu_pct':cpu_pct,
             'ram_bytes':ram_bytes,'players':players}
 
@@ -238,6 +256,32 @@ def history(db, window, now):
             'alerts':monitoring_alerts(db,now),
             'alert_policy':{'stale_seconds':ALERT_STALE_SECONDS,'ram_warning_gib':2,'ram_critical_gib':3}}
 
+def player_history(db, now):
+    cutoff = now - PLAYER_RETENTION
+    first, last = db.execute('SELECT MIN(ts),MAX(ts) FROM roster_samples WHERE ts > ? AND ts <= ?',
+                             (cutoff, now)).fetchone()
+    rows = db.execute("""
+        WITH samples_in_window AS (
+            SELECT ts, ROW_NUMBER() OVER (ORDER BY ts) AS sample_number
+            FROM samples WHERE ts > ? AND ts <= ?
+        ), sightings AS (
+            SELECT p.name, p.ts, s.sample_number,
+                LAG(s.sample_number) OVER by_player AS previous_sample,
+                LAG(p.ts) OVER by_player AS previous_time
+            FROM player_observations p JOIN samples_in_window s ON s.ts=p.ts
+            WINDOW by_player AS (PARTITION BY p.name ORDER BY p.ts)
+        ), intervals AS (
+            SELECT name, ts, SUM(CASE WHEN sample_number=previous_sample+1 AND ts-previous_time <= ?
+                THEN 0 ELSE 1 END) OVER (PARTITION BY name ORDER BY ts) AS period
+            FROM sightings
+        )
+        SELECT name, MIN(ts), MAX(ts) FROM intervals
+        GROUP BY name,period ORDER BY MAX(ts) DESC, name, MIN(ts) DESC
+        """, (cutoff, now, ALERT_MAX_GAP_SECONDS))
+    return {'ok':True,'first_sample':first,'last_sample':last,
+            'sessions':[{'name':name,'first_seen':start,'last_seen':end} for name,start,end in rows]}
+
+
 def main():
     if len(sys.argv) < 2:
         raise ValueError('Aktion fehlt')
@@ -245,10 +289,13 @@ def main():
     if action == 'sample' and len(sys.argv) == 2:
         now = int(time.time())
         online,cpu_ns,ram_bytes = service_snapshot()
-        players = online_count() if online else 0
+        players,names = online_roster() if online else (0, [])
         with storage() as db:
-            result = take_sample(db,now,online,cpu_ns,ram_bytes,players)
+            result = take_sample(db,now,online,cpu_ns,ram_bytes,players,names)
         print(json.dumps({'ok':True,**result}))
+    elif action == 'player-history' and len(sys.argv) == 2:
+        with storage() as db:
+            print(json.dumps(player_history(db,int(time.time()))))
     elif action == 'history' and len(sys.argv) == 3:
         with storage() as db:
             print(json.dumps(history(db,sys.argv[2],int(time.time()))))

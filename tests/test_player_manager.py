@@ -77,6 +77,20 @@ with patch.object(mod,'screen',fake_screen),patch.object(mod.subprocess,'run',re
                 raise AssertionError('Invalid name accepted: '+repr(value))
 print('OK: roster/permissions mapping, symlink protection and safe Bedrock player commands')
 
+with patch.object(mod,'screen',fake_screen), patch.object(mod.subprocess,'run',return_value=FakeResult()):
+    sent.clear()
+    with patch.object(mod.sys,'argv',['bedrock-console-manager','send','minecraft','/gamemode creative "Test Builder"']):
+        with redirect_stdout(io.StringIO()):
+            mod.main()
+    assert sent[-1][-1]=='gamemode creative "Test Builder"\r'
+    for command in ('stop','gamemode creative','time set noon\nstop','gamemode survival @a[tag=test]'):
+        try:
+            mod.panel_minecraft_command(command)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError('Unexpectedly accepted console command: '+repr(command))
+
 
 # Regression based on the actual Bedrock 1.26.63.1 list output supplied
 # by the test-container operator. A line break separates each player.

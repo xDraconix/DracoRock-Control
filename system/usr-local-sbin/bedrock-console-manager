@@ -302,6 +302,24 @@ def player_state():
           warnings=problems, status='snapshot', online_names_available=False)
 
 
+def panel_minecraft_command(value):
+    if not 1 <= len(value) <= 120 or not value.isascii() or any(ord(char) < 32 or ord(char) == 127 for char in value):
+        raise ValueError('Ungültiger Minecraft-Befehl')
+    value = value.strip().removeprefix('/')
+    game_mode = re.fullmatch(r'gamemode +(survival|creative|adventure|spectator) +(.+)', value)
+    if game_mode:
+        mode, target = game_mode.groups()
+        if target in ('@a', '@p', '@r'):
+            return f'gamemode {mode} {target}'
+        target = target.removeprefix('"').removesuffix('"') if target.startswith('"') and target.endswith('"') else target
+        if PLAYER_NAME.fullmatch(target) and target.strip() == target:
+            return f'gamemode {mode} "{target}"'
+        raise ValueError('Ungültiges Ziel für gamemode')
+    if re.fullmatch(r'list|difficulty +(peaceful|easy|normal|hard)|weather +(clear|rain|thunder)|time +(?:set +(day|night|noon|midnight|sunrise|sunset)|query +(daytime|gametime|day))', value):
+        return value
+    raise ValueError('Syntax prüfen. Unterstützt werden gamemode, difficulty, weather, time und list.')
+
+
 def main():
     if len(sys.argv) < 2: raise ValueError('Aktion fehlt')
     action = sys.argv[1]
@@ -313,12 +331,17 @@ def main():
         online_players()
     elif action == 'tail':
         if len(sys.argv) != 2: raise ValueError('Ungültige Parameter')
-        reply(ok=True, logs=screen_capture())
+        logs = screen_capture()
+        info = screen('-p', '0', '-Q', 'info')
+        size = re.search(r'/\(([0-9]+),[0-9]+\)', info.stdout) if info.returncode == 0 else None
+        reply(ok=True, logs=logs, columns=int(size[1]) if size else None)
     elif action == 'send':
         if len(sys.argv) != 4: raise ValueError('Ungültige Parameter')
         kind, value = sys.argv[2:]
         if kind == 'list' and value == '': command = 'list'
         elif kind in ('day','night') and value == '': command = 'time set ' + kind
+        elif kind == 'minecraft':
+            command = panel_minecraft_command(value)
         elif kind == 'say':
             if not (1 <= len(value) <= 180) or any(ord(c) < 32 or ord(c) == 127 for c in value): raise ValueError('Ungültige Nachricht')
             command = 'say ' + value
