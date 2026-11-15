@@ -1,0 +1,9 @@
+[Unit]
+Description=Daily DracoRock server and world backup
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 Europe/Berlin
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

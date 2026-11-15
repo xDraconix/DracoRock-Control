@@ -33,6 +33,10 @@ FIXED = {
         ('/etc/systemd/system/bedrock-monitor.service', 0o644),
     'system/systemd/bedrock-monitor.timer':
         ('/etc/systemd/system/bedrock-monitor.timer', 0o644),
+    'system/systemd/dracorock-backup.service':
+        ('/etc/systemd/system/dracorock-backup.service', 0o644),
+    'system/systemd/dracorock-backup.timer':
+        ('/etc/systemd/system/dracorock-backup.timer', 0o644),
     'system/systemd/bedrock-panel-self-update.service':
         ('/etc/systemd/system/bedrock-panel-self-update.service', 0o644),
     'system/sudoers/bedrock-control-pro':

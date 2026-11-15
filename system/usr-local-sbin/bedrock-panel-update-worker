@@ -83,5 +83,9 @@ else
  trap 'exit 130' INT
  trap 'exit 143' TERM
  /usr/bin/systemctl stop "$SERVICE"
+ if [[ "$(/usr/bin/systemctl show "$SERVICE" --property=Result --value)" != success ]]; then
+   echo 'Minecraft wurde nicht sauber beendet; Sicherung abgebrochen' >&2
+   exit 1
+ fi
  "$ENGINE" create
 fi

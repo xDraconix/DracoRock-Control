@@ -77,6 +77,8 @@ def validated_system_plan(installer):
                   '/etc/systemd/system/bedrock-monitor.timer',
                   '/etc/sudoers.d/bedrock-control-pro','/etc/apache2/sites-available/bedrock-control-pro.conf',
                   '/etc/tmpfiles.d/bedrock-')) or
+                dst in ('/etc/systemd/system/dracorock-backup.service',
+                        '/etc/systemd/system/dracorock-backup.timer') or
                 re.fullmatch(r'/etc/php/\d+\.\d+/apache2/conf\.d/99-bedrock-addon-upload\.ini',dst) is not None,
                 'System-Ziel außerhalb freigegebener Pfade')
         require(dst not in targets, 'Doppeltes Systemdatei-Ziel')

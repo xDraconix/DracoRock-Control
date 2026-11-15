@@ -176,6 +176,8 @@ fi
 install -d -m 0700 -o root -g root /var/lib/bedrock-control-pro
 install -m 0644 -o root -g root "$ROOT/system/systemd/bedrock-monitor.service" /etc/systemd/system/bedrock-monitor.service
 install -m 0644 -o root -g root "$ROOT/system/systemd/bedrock-monitor.timer" /etc/systemd/system/bedrock-monitor.timer
+install -m 0644 -o root -g root "$ROOT/system/systemd/dracorock-backup.service" /etc/systemd/system/dracorock-backup.service
+install -m 0644 -o root -g root "$ROOT/system/systemd/dracorock-backup.timer" /etc/systemd/system/dracorock-backup.timer
 install -m 0755 -o root -g root "$ROOT/system/usr-local-sbin/bedrock-panel-self-update-worker" /usr/local/sbin/bedrock-panel-self-update-worker
 install -m 0755 -o root -g root "$ROOT/system/usr-local-sbin/bedrock-panel-self-update-control" /usr/local/sbin/bedrock-panel-self-update-control
 install -m 0644 -o root -g root "$ROOT/system/systemd/bedrock-panel-self-update.service" /etc/systemd/system/bedrock-panel-self-update.service

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import subprocess
 """Restricted world selection helper. Never starts/stops Minecraft."""
-import json, os, pathlib, re, sys, tempfile, subprocess, shutil, zipfile, tarfile, time, uuid, stat
+import json, os, pathlib, re, sys, tempfile, subprocess, shutil, zipfile, uuid, stat
 BASE=pathlib.Path('/home/mcserver/minecraft_bedrock')
 WORLDS=BASE/'worlds'
 PROPS=BASE/'server.properties'
@@ -171,7 +171,6 @@ def select_new(name,data):
 
 
 UPLOADS=pathlib.Path('/var/lib/bedrock-panel/uploads')
-BACKUPS=pathlib.Path('/home/mcserver/backups/worlds')
 MAX_FILES=30000
 MAX_BYTES=2*1024**3
 
@@ -216,17 +215,17 @@ def duplicate(source,target):
     print(json.dumps({'ok':True,'message':'Welt dupliziert: '+target},ensure_ascii=False))
 
 def backup(name):
-    offline();src=safe_world(name);inspect_tree(src)
-    BACKUPS.mkdir(parents=True,exist_ok=True)
-    stamp=time.strftime('%Y%m%d-%H%M%S',time.gmtime())
-    dest=BACKUPS/(re.sub(r'[^a-zA-Z0-9_-]','_',name)+'-'+stamp+'-'+uuid.uuid4().hex[:8]+'.tar.gz')
+    offline()
+    safe_world(name)
+    result=subprocess.run(['/usr/local/sbin/dracorock-backup-manager','world',name],
+                          capture_output=True,text=True)
     try:
-        with tarfile.open(dest,'w:gz',dereference=False) as tar:
-            tar.add(src,arcname=name,recursive=True,filter=lambda ti: ti if ti.isfile() or ti.isdir() else None)
-        os.chmod(dest,0o640)
-    except Exception:
-        dest.unlink(missing_ok=True);raise
-    print(json.dumps({'ok':True,'message':'Sicherung erstellt: '+str(dest)},ensure_ascii=False))
+        data=json.loads(result.stdout)
+    except ValueError:
+        fail('Weltsicherung fehlgeschlagen')
+    if result.returncode:
+        fail(data.get('error','Weltsicherung fehlgeschlagen'))
+    print(json.dumps({'ok':True,'message':'Sicherung erstellt: '+data['worlds'][0]},ensure_ascii=False))
 
 def import_world(token,name):
     offline()

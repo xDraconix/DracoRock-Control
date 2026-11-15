@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
-"""DracoRock v3.2 backup engine, phase 1: offline-only, no service control.
-
-This module intentionally has no browser/sudo integration. The existing v3.1
-backup workflow stays unchanged until the new engine passes isolated tests.
-"""
+"""Create and verify offline Minecraft backups and retain calendar snapshots."""
 import argparse
+from datetime import datetime
 import fcntl
 import hashlib
 import json
@@ -12,16 +9,22 @@ import os
 import pwd
 from pathlib import Path
 import re
+import shutil
 import stat
 import subprocess
+import sys
 import tarfile
 import tempfile
 import time
 import uuid
+from zipfile import BadZipFile, ZipFile, ZIP_DEFLATED
+from zoneinfo import ZoneInfo
 
 SERVER = Path("/home/mcserver/minecraft_bedrock")
 BACKUPS = Path("/home/mcserver/backups")
-LOCK = Path("/run/lock/dracorock-backup.lock")
+LOCK = Path("/var/lib/bedrock-control-pro/dracorock-backup.lock")
+ZONE = ZoneInfo("Europe/Berlin")
+WORLD_STAMP = re.compile(r"-(\d{4}-\d{2}-\d{2}T\d{6}[+-]\d{4})-[a-f0-9]{8}\.zip\Z")
 NAME_RE = re.compile(r"minecraft-[0-9]{8}-[0-9]{6}-[a-f0-9]{8}\.tar\.gz\Z")
 MAX_FILES = 100000
 MAX_BYTES = 64 * 1024 ** 3
@@ -38,23 +41,23 @@ def require(condition, message):
 
 def offline():
     service = subprocess.run(
-        ["/usr/bin/systemctl", "is-active", "--quiet", "mcbedrock.service"],
-        check=False,
+        ["/usr/bin/systemctl", "show", "--property=ActiveState,Result", "mcbedrock.service"],
+        check=True, capture_output=True, text=True,
     )
     process = subprocess.run(
         ["/usr/bin/pgrep", "-u", "mcserver", "-x", "bedrock_server"],
         check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
-    require(service.returncode != 0 and process.returncode != 0,
-            "Minecraft muss fuer eine konsistente Sicherung gestoppt sein")
+    require({"ActiveState=inactive", "Result=success"}.issubset(service.stdout.splitlines())
+            and process.returncode == 1,
+            "Minecraft muss fuer eine konsistente Sicherung sauber gestoppt sein")
 
 
-def check_source():
-    require(SERVER.is_dir() and not SERVER.is_symlink(), "Serververzeichnis ungueltig")
-    require((SERVER / "server.properties").is_file() and not (SERVER / "server.properties").is_symlink(), "server.properties fehlt")
+def inspect_tree(source):
+    require(source.is_dir() and not source.is_symlink(), "Quellverzeichnis ungueltig")
     count = 0
     total = 0
-    for root, dirs, files in os.walk(SERVER, followlinks=False):
+    for root, dirs, files in os.walk(source, followlinks=False):
         for name in dirs + files:
             entry = Path(root) / name
             info = entry.lstat()
@@ -67,6 +70,11 @@ def check_source():
                 require(count <= MAX_FILES and total <= MAX_BYTES,
                         "Sicherheitslimit ueberschritten")
     return count, total
+
+
+def check_source():
+    require((SERVER / "server.properties").is_file() and not (SERVER / "server.properties").is_symlink(), "server.properties fehlt")
+    return inspect_tree(SERVER)
 
 
 def check_backup_dir():
@@ -107,20 +115,21 @@ def validate_archive(path):
     return count
 
 
-def create():
+def create(directory=None):
     offline()
     check_backup_dir()
     files, source_bytes = check_source()
-    usage = os.statvfs(BACKUPS)
+    directory = BACKUPS if directory is None else directory
+    usage = os.statvfs(directory)
     free = usage.f_bavail * usage.f_frsize
     require(free >= source_bytes + max(256 * 1024 ** 2, source_bytes // 10),
             "Nicht genug freier Speicher fuer die Sicherung")
     name = "minecraft-" + time.strftime("%Y%m%d-%H%M%S", time.gmtime()) + "-" + uuid.uuid4().hex[:8] + ".tar.gz"
-    target = BACKUPS / name
+    target = directory / name
     temp = None
     manifest_temp = None
     try:
-        fd, temp_name = tempfile.mkstemp(prefix=".dracorock-", suffix=".part", dir=BACKUPS)
+        fd, temp_name = tempfile.mkstemp(prefix=".dracorock-", suffix=".part", dir=directory)
         temp = Path(temp_name)
         with os.fdopen(fd, "wb") as output:
             with tarfile.open(fileobj=output, mode="w:gz", dereference=False) as archive:
@@ -133,7 +142,7 @@ def create():
         meta = {"schema": 1, "archive": name, "sha256": sha,
                 "size": temp.stat().st_size, "files": files,
                 "created_utc": int(time.time()), "source_bytes": source_bytes}
-        fd, meta_name = tempfile.mkstemp(prefix=".dracorock-", suffix=".json.part", dir=BACKUPS)
+        fd, meta_name = tempfile.mkstemp(prefix=".dracorock-", suffix=".json.part", dir=directory)
         manifest_temp = Path(meta_name)
         with os.fdopen(fd, "w", encoding="utf-8") as output:
             json.dump(meta, output, sort_keys=True)
@@ -146,13 +155,9 @@ def create():
         # treated as verified because its sidecar is absent.
         os.replace(temp, target)
         temp = None
-        os.replace(manifest_temp, BACKUPS / (name + ".json"))
+        os.replace(manifest_temp, directory / (name + ".json"))
         manifest_temp = None
-        directory_fd = os.open(BACKUPS, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
+        sync_directory(directory)
         return meta
     finally:
         if temp is not None:
@@ -161,11 +166,150 @@ def create():
             manifest_temp.unlink(missing_ok=True)
 
 
+def sync_directory(directory):
+    fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def managed_directory(directory):
+    directory.mkdir(mode=0o700, exist_ok=True)
+    info = directory.lstat()
+    require(stat.S_ISDIR(info.st_mode) and info.st_uid == 0
+            and stat.S_IMODE(info.st_mode) == 0o700, "Unsicheres Aufbewahrungsverzeichnis")
+    return directory
+
+
+def worlds():
+    directory = SERVER / "worlds"
+    if not directory.exists() and not directory.is_symlink():
+        return []
+    require(directory.is_dir() and not directory.is_symlink(), "Unsicheres Weltverzeichnis")
+    return sorted(entry for entry in directory.iterdir() if not entry.name.startswith(".")
+                  and entry.is_dir() and not entry.is_symlink()
+                  and (entry / "level.dat").is_file() and not (entry / "level.dat").is_symlink())
+
+
+def world_zip(source, directory):
+    count, size = inspect_tree(source)
+    name_file = source / "levelname.txt"
+    display_name = source.name
+    if name_file.is_file():
+        with name_file.open("r", encoding="utf-8-sig", errors="replace") as stream:
+            display_name = stream.read(256).strip() or display_name
+    label = re.sub(r'[^\w .-]', "_", display_name).strip(" .")[:48] or "Welt"
+    stamp = datetime.now(ZONE).strftime("%Y-%m-%dT%H%M%S%z")
+    target = directory / f"{label}-{stamp}-{uuid.uuid4().hex[:8]}.zip"
+    usage = os.statvfs(directory)
+    require(usage.f_bavail * usage.f_frsize >= size + max(256 * 1024 ** 2, size // 10),
+            "Nicht genug freier Speicher fuer das Welt-ZIP")
+    with tempfile.NamedTemporaryFile(prefix=".world-", suffix=".part", dir=directory, delete=False) as stream:
+        stage = Path(stream.name)
+        try:
+            with ZipFile(stream, "w", compression=ZIP_DEFLATED, compresslevel=3) as archive:
+                for path in sorted(source.rglob("*")):
+                    archive.write(path, path.relative_to(source).as_posix())
+            stream.flush()
+            os.fsync(stream.fileno())
+            offline()
+            with ZipFile(stage) as archive:
+                require(sum(not item.is_dir() for item in archive.infolist()) == count
+                        and archive.testzip() is None, "Welt-ZIP ist unvollstaendig oder beschaedigt")
+            os.replace(stage, target)
+            sync_directory(directory)
+        finally:
+            stage.unlink(missing_ok=True)
+    return target
+
+
+def retained(snapshots):
+    """Keep the newest snapshot in each of the latest populated calendar buckets."""
+    buckets = ({}, {}, {})
+    for path, moment in sorted(snapshots, key=lambda entry: entry[1], reverse=True):
+        local = moment.astimezone(ZONE)
+        iso = local.isocalendar()
+        for bucket, key in zip(buckets, (local.date(), (iso.year, iso.week), (local.year, local.month))):
+            bucket.setdefault(key, path)
+    return {path for bucket, limit in zip(buckets, (7, 4, 12))
+            for path in list(bucket.values())[:limit]}
+
+
+def prune(directory, full=False):
+    snapshots = []
+    for path in sorted(directory.iterdir()):
+        match = NAME_RE.fullmatch(path.name) if full else WORLD_STAMP.search(path.name)
+        if match is None or path.is_symlink() or not path.is_file():
+            continue
+        try:
+            if full:
+                sidecar = path.with_name(path.name + ".json")
+                if sidecar.is_symlink() or not sidecar.is_file():
+                    continue
+                manifest = json.loads(sidecar.read_text(encoding="utf-8"))
+                if manifest["archive"] != path.name or manifest["size"] != path.stat().st_size:
+                    continue
+                moment = datetime.fromtimestamp(manifest["created_utc"], ZONE)
+            else:
+                moment = datetime.strptime(match[1], "%Y-%m-%dT%H%M%S%z")
+        except (ValueError, KeyError, TypeError, OverflowError):
+            continue
+        snapshots.append((path, moment))
+    keep = retained(snapshots)
+    for path, _ in snapshots:
+        if path not in keep:
+            path.unlink()
+            if full:
+                path.with_name(path.name + ".json").unlink()
+    sync_directory(directory)
+
+
+def world_directory(source):
+    # Use the folder identity as the retention key, even when display names match.
+    key = hashlib.sha256(os.fsencode(source.name)).hexdigest()[:24]
+    return managed_directory(managed_directory(BACKUPS / "worlds-7-4-12") / key)
+
+
+def create_set(selected=None):
+    offline()
+    check_backup_dir()
+    sources = worlds()
+    if selected is not None:
+        sources = [source for source in sources if source.name == selected]
+        require(len(sources) == 1, "Welt nicht gefunden")
+    destinations = []
+    full = None
+    if selected is None:
+        directory = managed_directory(BACKUPS / "server-7-4-12")
+        full = create(directory)
+        destinations.append((directory, True))
+    archives = []
+    for source in sources:
+        directory = world_directory(source)
+        archives.append(str(world_zip(source, directory)))
+        destinations.append((directory, False))
+    if selected is None:
+        # A removed world still has its own retained history.
+        root = BACKUPS / "worlds-7-4-12"
+        if root.exists():
+            destinations.extend((entry, False) for entry in sorted(managed_directory(root).iterdir())
+                                if re.fullmatch(r"[a-f0-9]{24}", entry.name)
+                                and (entry, False) not in destinations)
+    for directory, is_full in destinations:
+        prune(managed_directory(directory), full=is_full)
+    return {"ok": True, "server": full, "worlds": archives}
+
+
 def verify(name):
     require(NAME_RE.fullmatch(name) is not None, "Ungueltiger Archivname")
     check_backup_dir()
     archive = BACKUPS / name
-    sidecar = BACKUPS / (name + ".json")
+    if not archive.exists() and not archive.is_symlink():
+        directory = BACKUPS / "server-7-4-12"
+        require(directory.is_dir() and not directory.is_symlink(), "Archiv fehlt")
+        archive = directory / name
+    sidecar = archive.with_name(name + ".json")
     require(sidecar.is_file() and not sidecar.is_symlink(), "Pruefmanifest fehlt")
     meta = json.loads(sidecar.read_text(encoding="utf-8"))
     require(meta.get("schema") == 1 and meta.get("archive") == name,
@@ -177,35 +321,216 @@ def verify(name):
     return {"ok": True, "archive": name, "sha256": meta["sha256"]}
 
 
+def visit_backups(visit):
+    check_backup_dir()
+
+    def scan(directory, scope, pattern, parent, prefix, worlds=False):
+        try:
+            fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+        except (FileNotFoundError, NotADirectoryError):
+            return
+        try:
+            with os.scandir(fd) as entries:
+                for entry in entries:
+                    relative = prefix + entry.name
+                    if worlds:
+                        if re.fullmatch(r"[a-f0-9]{24}", entry.name):
+                            scan(entry.name, scope, WORLD_STAMP.search, fd, relative + "/")
+                        continue
+                    if not pattern(entry.name):
+                        continue
+                    try:
+                        info = entry.stat(follow_symlinks=False)
+                    except FileNotFoundError:
+                        continue
+                    if stat.S_ISREG(info.st_mode):
+                        visit(scope, entry.name, info, fd, hashlib.sha256(os.fsencode(relative) + f"\0{info.st_dev}:{info.st_ino}:{info.st_mtime_ns}".encode()).hexdigest())
+        finally:
+            os.close(fd)
+
+    root = os.open(BACKUPS, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        server = re.compile(r"minecraft-.*\.tar\.gz\Z").fullmatch
+        scan(".", "server", server, root, "")
+        scan("server-7-4-12", "server", server, root, "server-7-4-12/")
+        scan("worlds", "worlds", re.compile(r".+\.tar\.gz\Z").fullmatch, root, "worlds/")
+        scan("worlds-7-4-12", "worlds", None, root, "worlds-7-4-12/", worlds=True)
+    finally:
+        os.close(root)
+
+
+def list_backups():
+    files = {"worlds": [], "server": []}
+    total_bytes = 0
+
+    def add(scope, name, info, fd, archive_id):
+        nonlocal total_bytes
+        total_bytes += info.st_size
+        if scope == "server":
+            try:
+                manifest = os.stat(name + ".json", dir_fd=fd, follow_symlinks=False)
+            except FileNotFoundError:
+                pass
+            else:
+                if stat.S_ISREG(manifest.st_mode):
+                    total_bytes += manifest.st_size
+        files[scope].append((info.st_mtime_ns, {
+            "id": archive_id,
+            "name": name,
+            "size": info.st_size,
+            "date": datetime.fromtimestamp(info.st_mtime, ZONE).strftime("%Y-%m-%d %H:%M:%S"),
+        }))
+
+    visit_backups(add)
+    result = {scope: [entry for _, entry in sorted(rows, key=lambda item: (-item[0], item[1]["name"]))]
+              for scope, rows in files.items()}
+    return {**result, "total_bytes": total_bytes}
+
+
+def archive_to_zip(source, target, scope, max_output):
+    seen = set()
+    total = 0
+    with tarfile.open(fileobj=source, mode="r|gz") as archive:
+        with ZipFile(target, "w", compression=ZIP_DEFLATED, compresslevel=3) as result:
+            for item in archive:
+                name = item.name.rstrip("/")
+                parts = name.split("/")
+                require(name and not any(part in ("", ".", "..") or re.search(r'[\\:\x00-\x1f]', part)
+                                         for part in parts), "Unsicherer Archivpfad")
+                require(scope != "server" or parts[0] == SERVER.name, "Unerwartete Archivwurzel")
+                require(item.isfile() or item.isdir(), "Unerlaubter Archiv-Eintrag")
+                if scope == "worlds":
+                    if len(parts) == 1:
+                        require(item.isdir(), "Weltarchiv ohne Weltordner")
+                        continue
+                    name = "/".join(parts[1:])
+                require(name not in seen and len(seen) < MAX_FILES, "Archiv-Limit ueberschritten")
+                seen.add(name)
+                if item.isdir():
+                    result.writestr(name + "/", b"")
+                    continue
+                total += item.size
+                require(total <= MAX_BYTES, "Archiv-Limit ueberschritten")
+                stream = archive.extractfile(item)
+                require(stream is not None, "Archiv-Eintrag unlesbar")
+                with stream, result.open(name, "w", force_zip64=True) as output:
+                    while chunk := stream.read(1024 * 1024):
+                        output.write(chunk)
+                        require(target.tell() <= max_output, "Nicht genug Platz fuer den ZIP-Download")
+    require(bool(seen) and target.tell() <= max_output, "ZIP-Export unvollstaendig")
+
+
+def download_backup(archive_id):
+    require(re.fullmatch(r"[a-f0-9]{64}", archive_id) is not None, "Ungueltige Backup-ID")
+    selected = None
+
+    def select(scope, name, info, fd, candidate_id):
+        nonlocal selected
+        if candidate_id != archive_id:
+            return
+        handle = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+        current = os.fstat(handle)
+        if (not stat.S_ISREG(current.st_mode) or current.st_nlink != 1
+                or (current.st_dev, current.st_ino) != (info.st_dev, info.st_ino)):
+            os.close(handle)
+            raise BackupError("Archiv wurde veraendert")
+        selected = scope, name, os.fdopen(handle, "rb")
+
+    visit_backups(select)
+    require(selected is not None, "Backup nicht gefunden")
+    scope, name, source = selected
+    with source:
+        if name.endswith(".zip"):
+            send_zip(source, name)
+            return
+        # Only one conversion uses scratch space at a time.
+        lock = LOCK.with_name("dracorock-backup-download.lock")
+        with lock.open("a") as guard:
+            try:
+                fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise BackupError("Ein ZIP-Export laeuft bereits") from exc
+            usage = os.statvfs(LOCK.parent)
+            max_output = usage.f_bavail * usage.f_frsize - 256 * 1024 ** 2
+            require(max_output > 0, "Nicht genug Platz fuer den ZIP-Download")
+            with tempfile.TemporaryFile(dir=LOCK.parent) as output:
+                archive_to_zip(source, output, scope, max_output)
+                output.seek(0)
+                send_zip(output, name.removesuffix(".tar.gz") + ".zip")
+
+
+def send_zip(source, name):
+    size = os.fstat(source.fileno()).st_size
+    print(json.dumps({"name": name, "size": size}, ensure_ascii=True), flush=True)
+    shutil.copyfileobj(source, sys.stdout.buffer, 1024 * 1024)
+
+
+def delete_backup(archive_id):
+    require(re.fullmatch(r"[a-f0-9]{64}", archive_id) is not None, "Ungueltige Backup-ID")
+    deleted = False
+
+    def remove(scope, name, info, fd, candidate_id):
+        nonlocal deleted
+        if archive_id != candidate_id:
+            return
+        current = os.stat(name, dir_fd=fd, follow_symlinks=False)
+        require(stat.S_ISREG(current.st_mode) and (current.st_dev, current.st_ino)
+                == (info.st_dev, info.st_ino), "Archiv wurde veraendert")
+        os.unlink(name, dir_fd=fd)
+        if scope == "server":
+            manifest = name + ".json"
+            try:
+                info = os.stat(manifest, dir_fd=fd, follow_symlinks=False)
+                if stat.S_ISREG(info.st_mode):
+                    os.unlink(manifest, dir_fd=fd)
+            except FileNotFoundError:
+                pass
+        os.fsync(fd)
+        deleted = True
+
+    visit_backups(remove)
+    require(deleted, "Backup nicht gefunden")
+    return {"ok": True}
+
+
 def main():
-    parser = argparse.ArgumentParser(description="DracoRock Backup-Engine (Phase 1)")
-    parser.add_argument("command", choices=("create", "verify", "preflight"))
+    parser = argparse.ArgumentParser(description="DracoRock Backup-Engine")
+    parser.add_argument("command", choices=("create", "world", "verify", "preflight", "list", "download", "delete"))
     parser.add_argument("archive", nargs="?")
     args = parser.parse_args()
     require(os.geteuid() == 0, "Nur als root ausfuehrbar")
-    require((args.command == "verify") == (args.archive is not None),
-            "verify benoetigt einen Archivnamen; create akzeptiert keinen")
+    require((args.command in ("verify", "world")) == (args.archive is not None),
+            "verify und world benoetigen genau einen Namen")
+    if args.command == "download":
+        download_backup(sys.stdin.readline(66).rstrip("\n"))
+        return
+    if args.command == "list":
+        print(json.dumps(list_backups(), ensure_ascii=True))
+        return
     LOCK.parent.mkdir(parents=True, exist_ok=True)
     with LOCK.open("a+") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             raise BackupError("Ein Backup-Auftrag laeuft bereits") from exc
-        if args.command == "preflight":
+        if args.command == "delete":
+            result = delete_backup(sys.stdin.readline(66).rstrip("\n"))
+        elif args.command == "preflight":
             check_backup_dir()
             files, size = check_source()
+            size += sum(inspect_tree(source)[1] for source in worlds())
             statvfs = os.statvfs(BACKUPS)
             require(statvfs.f_bavail * statvfs.f_frsize >= size + max(256 * 1024 ** 2, size // 10),
                     "Nicht genug freier Speicher fuer die Sicherung")
             result = {"ok": True, "files": files, "source_bytes": size}
         else:
-            result = create() if args.command == "create" else verify(args.archive)
+            result = verify(args.archive) if args.command == "verify" else create_set(args.archive)
         print(json.dumps(result, ensure_ascii=False))
 
 
 if __name__ == "__main__":
     try:
         main()
-    except (BackupError, OSError, ValueError, tarfile.TarError) as exc:
+    except (BackupError, OSError, ValueError, tarfile.TarError, BadZipFile, subprocess.SubprocessError) as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False))
         raise SystemExit(1)

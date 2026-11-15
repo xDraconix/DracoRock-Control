@@ -1,12 +1,16 @@
 """Isolated regression tests for the v3.2 offline backup engine."""
 import importlib.machinery
 import importlib.util
+import io
 import json
 import os
 from types import SimpleNamespace
 from pathlib import Path
 import tempfile
+import tarfile
 import unittest
+from datetime import datetime, timedelta
+from zipfile import ZipFile
 from unittest.mock import patch
 
 SCRIPT = Path(__file__).resolve().parents[1] / "system/usr-local-sbin/dracorock-backup-manager"
@@ -75,6 +79,55 @@ class BackupEngineTests(unittest.TestCase):
         self.assertEqual(result["sha256"], engine.digest(self.backups / result["archive"]))
         self.assertEqual(engine.verify(result["archive"])["ok"], True)
         self.assertEqual(json.loads((self.backups / (result["archive"] + ".json")).read_text())["sha256"], result["sha256"])
+
+    def test_retention_uses_calendar_buckets_and_keeps_latest_per_bucket(self):
+        start = datetime(2026, 11, 15, 4, tzinfo=engine.ZONE)
+        snapshots = [(index, start - timedelta(days=index)) for index in range(400)]
+        snapshots.append(("older-today", start - timedelta(hours=2)))
+        keep = engine.retained(snapshots)
+        self.assertTrue(set(range(7)).issubset(keep))
+        self.assertNotIn("older-today", keep)
+        self.assertLessEqual(len(keep), 23)
+        self.assertEqual(len({(snapshots[i][1].year, snapshots[i][1].month) for i in keep}), 12)
+        self.assertTrue(all(index in keep for index in (7, 14, 21)))
+
+    def test_managed_backup_includes_separate_world_zip(self):
+        world = self.server / "worlds" / "world-folder"
+        world.mkdir(parents=True)
+        (world / "level.dat").write_bytes(b"level")
+        (world / "levelname.txt").write_text("Beispiel Welt", encoding="utf-8")
+        legacy = self.backups / "legacy.tar.gz"
+        legacy.write_bytes(b"legacy")
+        result = engine.create_set()
+        archive = Path(result["worlds"][0])
+        self.assertTrue(archive.name.startswith("Beispiel Welt-"))
+        self.assertEqual(archive.suffix, ".zip")
+        with ZipFile(archive) as data:
+            self.assertEqual(data.read("level.dat"), b"level")
+            self.assertIsNone(data.testzip())
+        self.assertTrue(engine.verify(result["server"]["archive"])["ok"])
+        self.assertTrue(legacy.is_file())
+        listed = engine.list_backups()
+        self.assertEqual([entry["name"] for entry in listed["worlds"]], [archive.name])
+        self.assertIn(result["server"]["archive"], [entry["name"] for entry in listed["server"]])
+
+    def test_tar_zip_export_preserves_server_tree_and_rejects_traversal(self):
+        def tar_with(name):
+            source = io.BytesIO()
+            with tarfile.open(fileobj=source, mode="w:gz") as archive:
+                entry = tarfile.TarInfo(name)
+                entry.size = 4
+                archive.addfile(entry, io.BytesIO(b"test"))
+            source.seek(0)
+            return source
+
+        name = self.server.name + "/server.properties"
+        target = io.BytesIO()
+        engine.archive_to_zip(tar_with(name), target, "server", 4096)
+        with ZipFile(target) as archive:
+            self.assertEqual(archive.read(name), b"test")
+        with self.assertRaises(engine.BackupError):
+            engine.archive_to_zip(tar_with(self.server.name + "/../unsafe"), io.BytesIO(), "server", 4096)
 
     def test_corruption_detected(self):
         result = engine.create()
