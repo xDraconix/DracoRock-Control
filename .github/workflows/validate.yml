@@ -44,7 +44,7 @@ jobs:
               print("OK:", path)
           PY
       - name: Test scheduled backups and job history
-        run: python3 tests/test_maintenance.py
+        run: sudo python3 tests/test_maintenance.py
       - name: Test DracoRock branding and signed legacy compatibility
         run: python3 tests/test_dracorock_branding.py
       - name: Test official Mojang Bedrock update detection

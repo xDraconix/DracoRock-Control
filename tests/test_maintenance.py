@@ -132,8 +132,8 @@ class MaintenanceTests(unittest.TestCase):
             result = subprocess.run(["bash", str(path), "update", identity],
                                     capture_output=True, text=True,
                                     env={**os.environ, "INVOCATION_ID": "e" * 32})
-            record = json.loads((root / "history" / (identity + ".json")).read_text())
             self.assertEqual(result.returncode, 42, result.stderr)
+            record = json.loads((root / "history" / (identity + ".json")).read_text())
             self.assertEqual(record["state"], "failed")
             self.assertEqual(record["exit_status"], 42)
             self.assertEqual(record["invocation"], "e" * 32)
