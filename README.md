@@ -4,7 +4,7 @@ DracoRock Control verwaltet einen **Minecraft Bedrock Dedicated Server auf Debia
 
 ## Version und Hauptfunktionen
 
-**DracoRock Control v3.4.0** wird auf dem Feature-Branch vorbereitet. Veröffentlichte stabile Pakete stehen unter [GitHub Releases](https://github.com/xDraconix/DracoRock-Control/releases/latest).
+**DracoRock Control v3.4.0** ist der freigegebene Quellcode-Stand. Veröffentlichte stabile Pakete stehen unter [GitHub Releases](https://github.com/xDraconix/DracoRock-Control/releases/latest).
 
 ### Intelligentes Live-Monitoring und Dashboard-Warnungen
 
