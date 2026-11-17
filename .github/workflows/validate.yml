@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [feature/panel-updater-v2.5.0]
+    branches: [main]
 
 permissions:
   contents: read
@@ -43,6 +43,8 @@ jobs:
               compile(path.read_bytes(), str(path), "exec")
               print("OK:", path)
           PY
+      - name: Test scheduled backups and job history
+        run: sudo python3 tests/test_maintenance.py
       - name: Test DracoRock branding and signed legacy compatibility
         run: python3 tests/test_dracorock_branding.py
       - name: Test official Mojang Bedrock update detection

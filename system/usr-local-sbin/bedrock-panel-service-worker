@@ -4,12 +4,20 @@ export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 ACTION="${1:-}"; ID="${2:-}"
 [[ "$ACTION" =~ ^(start|stop|restart)$ && "$ID" =~ ^[a-f0-9]{32}$ ]] || exit 2
 DIR=/run/bedrock-panel-jobs; FILE="$DIR/$ID.json"
+STARTED_AT="$(date +%s)"
 write_status() {
   local state="$1" message="$2" rc="$3" tmp
   tmp="$(mktemp "$DIR/.job.XXXXXXXX")"
   # Fixed strings only; no untrusted output inserted into JSON.
-  printf '{"id":"%s","action":"%s","state":"%s","message":"%s","exit_status":%s}\n' "$ID" "$ACTION" "$state" "$message" "$rc" > "$tmp"
+  printf '{"id":"%s","action":"%s","state":"%s","message":"%s","exit_status":%s,"started_at":%s,"updated_at":%s,"invocation":"%s"}\n' "$ID" "$ACTION" "$state" "$message" "$rc" "$STARTED_AT" "$(date +%s)" "${INVOCATION_ID:-}" > "$tmp"
   chown root:www-data "$tmp"; chmod 0640 "$tmp"; mv -f "$tmp" "$FILE"
+  if [[ "$state" == success || "$state" == failed ]]; then
+    install -d -m 0750 -o root -g www-data /var/lib/bedrock-control-pro/jobs
+    history_tmp="$(mktemp /var/lib/bedrock-control-pro/jobs/.status.XXXXXXXX)"
+    install -m 0640 -o root -g www-data "$FILE" "$history_tmp"
+    mv -f "$history_tmp" "/var/lib/bedrock-control-pro/jobs/$ID.json"
+    find /var/lib/bedrock-control-pro/jobs -maxdepth 1 -type f -name '*.json' -printf '%T@ %p\n' | sort -nr | tail -n +101 | cut -d' ' -f2- | xargs -r rm --
+  fi
 }
 finish() {
   local rc=$?

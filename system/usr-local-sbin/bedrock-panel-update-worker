@@ -10,14 +10,27 @@ JOB_ID="${2:-}"
 [[ "$JOB_ID" =~ ^[a-f0-9]{32}$ ]] || { echo 'Ungueltige Auftrags-ID' >&2; exit 2; }
 JOB_DIR=/run/bedrock-panel-jobs
 JOB_FILE="$JOB_DIR/$JOB_ID.json"
+STARTED_AT="$(date +%s)"
 # Fixed messages only: never interpolate untrusted command output into JSON.
 write_status() {
  local state="$1" message="$2" exit_code="$3" tmp
  tmp="$(/usr/bin/mktemp "$JOB_DIR/.status.XXXXXXXX")"
- /usr/bin/printf '{"id":"%s","action":"%s","state":"%s","message":"%s","exit_status":%s}\n' "$JOB_ID" "$ACTION" "$state" "$message" "$exit_code" > "$tmp"
+ /usr/bin/printf '{"id":"%s","action":"%s","state":"%s","message":"%s","exit_status":%s,"started_at":%s,"updated_at":%s,"invocation":"%s"}\n' "$JOB_ID" "$ACTION" "$state" "$message" "$exit_code" "$STARTED_AT" "$(date +%s)" "${INVOCATION_ID:-}" > "$tmp"
  /usr/bin/chown root:www-data "$tmp"
  /usr/bin/chmod 0640 "$tmp"
  /usr/bin/mv -f "$tmp" "$JOB_FILE"
+ if [[ "$state" == success || "$state" == failed ]]; then
+   /usr/bin/install -d -m 0750 -o root -g www-data /var/lib/bedrock-control-pro/jobs
+   history_tmp="$(/usr/bin/mktemp /var/lib/bedrock-control-pro/jobs/.status.XXXXXXXX)"
+   /usr/bin/install -m 0640 -o root -g www-data "$JOB_FILE" "$history_tmp"
+   /usr/bin/mv -f "$history_tmp" "/var/lib/bedrock-control-pro/jobs/$JOB_ID.json"
+   if [[ "$state" == success && "$ACTION" == backup ]]; then
+     /usr/bin/install -m 0640 -o root -g www-data "$JOB_FILE" /var/lib/bedrock-control-pro/last-backup.json.tmp
+     /usr/bin/mv -f /var/lib/bedrock-control-pro/last-backup.json.tmp /var/lib/bedrock-control-pro/last-backup.json
+   fi
+   # Keep the latest 100 completed jobs across reboots.
+   /usr/bin/find /var/lib/bedrock-control-pro/jobs -maxdepth 1 -type f -name '*.json' -printf '%T@ %p\n' | /usr/bin/sort -nr | /usr/bin/tail -n +101 | /usr/bin/cut -d' ' -f2- | /usr/bin/xargs -r /usr/bin/rm --
+ fi
 }
 FINAL_MESSAGE='Auftrag fehlgeschlagen. Protokoll pruefen.'
 finish() {
@@ -67,6 +80,7 @@ else
    echo 'Backup-Verzeichnis fehlt oder ist ein Symlink' >&2
    exit 1
  }
+ write_status running 'Pruefe Speicherplatz und Quelldateien.' null
  "$ENGINE" preflight
  was_active=0
  if /usr/bin/systemctl is-active --quiet "$SERVICE"; then
@@ -78,6 +92,7 @@ else
    local rc="$1"
    trap - EXIT INT TERM
    if ((was_active)); then
+     write_status running 'Minecraft wird nach der Sicherung gestartet.' null
      if ! /usr/bin/systemctl start "$SERVICE"; then
        echo 'KRITISCH: Minecraft konnte nach dem Backup nicht gestartet werden' >&2
        rc=1
@@ -92,10 +107,12 @@ else
  trap 'restart_minecraft "$?"' EXIT
  trap 'exit 130' INT
  trap 'exit 143' TERM
+ write_status running 'Minecraft wird fuer eine konsistente Sicherung gestoppt.' null
  /usr/bin/systemctl stop "$SERVICE"
  if [[ "$(/usr/bin/systemctl show "$SERVICE" --property=Result --value)" != success ]]; then
    echo 'Minecraft wurde nicht sauber beendet; Sicherung abgebrochen' >&2
    exit 1
  fi
+ write_status running 'Server- und Weltarchive werden erstellt und geprueft.' null
  "$ENGINE" create
 fi
