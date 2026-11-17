@@ -524,6 +524,7 @@
  "\" nach \"": "\" to \"",
  "Einstellung(en) gespeichert. Backup:": "setting(s) saved. Backup:",
  "Wiederherstellung": "Restore",
+ "Wiederherstellen": "Restore",
  "GiB verfügbar": "GiB available"
 };
  let language='de';

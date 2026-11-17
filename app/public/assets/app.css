@@ -583,3 +583,8 @@ dialog::backdrop{background:#000b}
 .language-label{display:flex;align-items:center;gap:.5rem;font-size:.8rem}
 .language-select{width:auto}
 .headright{flex-wrap:wrap}
+.actions{align-items:center}
+.actions>label{margin:0;align-self:center}
+.headright{margin-left:auto;justify-content:flex-end}
+.headright .language-label{margin:0;white-space:nowrap}
+.headright .language-select{min-height:44px}

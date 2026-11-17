@@ -558,7 +558,7 @@ function renderBackupList(id,files){
   remove.addEventListener('click',()=>deleteBackup(file,remove));
   if(id==='backupWorldList'){
    const restore=document.createElement('button');restore.type='button';restore.className='secondary';
-   restore.textContent='Wiederherstellen';restore.addEventListener('click',()=>openRestore(file));actions.append(restore);
+   restore.textContent=tr('Wiederherstellen');restore.addEventListener('click',()=>openRestore(file));actions.append(restore);
   }
   actions.append(link,remove);
   row.append(info,actions);

@@ -22,6 +22,8 @@ const english=load('en');
 assert.equal(english.document.documentElement.lang,'en');
 assert.equal(english.text.nodeValue,'  Server Overview ');
 assert.equal(english.translate('Welt wiederherstellen'),'Restore world');
+assert.equal(english.translate('Wiederherstellen'),'Restore');
+assert.equal(english.translate('Wiederherstellung'),'Restore');
 assert.equal(english.translate('Backup-Zeitplan gespeichert.'),'Backup schedule saved.');
 assert.equal(english.translate('<img src=x onerror=alert(1)>'),'<img src=x onerror=alert(1)>');
 assert.equal(english.translate('My custom world'),'My custom world');
