@@ -507,7 +507,8 @@ def command(*arguments):
 
 def read_record(path):
     try:
-        return json.loads(path.read_text())
+        record = json.loads(path.read_text())
+        return record if isinstance(record, dict) else {}
     except (OSError, ValueError):
         return {}
 
@@ -583,6 +584,8 @@ def scheduled_backup():
             try:
                 roster = json.loads(query.stdout)
             except ValueError:
+                roster = {}
+            if not isinstance(roster, dict):
                 roster = {}
             empty = (query.returncode == 0 and roster.get("ok") is True
                      and type(roster.get("count")) is int and roster["count"] == 0)
