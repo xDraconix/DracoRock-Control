@@ -45,6 +45,10 @@ jobs:
           PY
       - name: Test scheduled backups and job history
         run: sudo python3 tests/test_maintenance.py
+      - name: Test world restore and configurable schedules
+        run: sudo python3 tests/test_restore_schedule.py
+      - name: Test language selection and translation
+        run: node tests/test_i18n.cjs
       - name: Test DracoRock branding and signed legacy compatibility
         run: python3 tests/test_dracorock_branding.py
       - name: Test official Mojang Bedrock update detection

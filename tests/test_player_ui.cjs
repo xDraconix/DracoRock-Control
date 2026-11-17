@@ -16,7 +16,7 @@ class Element{
  setAttribute(key,value){this.attrs[key]=value;}
  addEventListener(event,callback){this.events[event]=callback;}
 }
-const ctx={document:{createElement:tag=>new Element(tag)},playerCommand:(command,name)=>issued.push([command,name])};
+const ctx={tr:value=>value,document:{createElement:tag=>new Element(tag)},playerCommand:(command,name)=>issued.push([command,name])};
 vm.createContext(ctx);
 vm.runInContext(source.slice(from,until),ctx);
 function buttons(entry){

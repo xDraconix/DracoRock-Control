@@ -1,5 +1,5 @@
-'use strict';let csrf='',busy=false;const $=id=>document.getElementById(id);const txt=(id,value)=>{$(id).textContent=value??'–'};async function api(path,opts={}){const r=await fetch('?api='+path,{credentials:'same-origin',cache:'no-store',...opts});const d=await r.json();if(!r.ok)throw Error(d.error||d.message||'Anfrage fehlgeschlagen');return d}let noticeTimer=null;
-function showNotice(s,bad=false,persistent=false){const el=$('notice');if(noticeTimer)clearTimeout(noticeTimer);el.hidden=false;el.textContent=s;el.classList.toggle('bad',bad);el.classList.toggle('pending',persistent);if(!persistent)noticeTimer=setTimeout(()=>{el.hidden=true;noticeTimer=null},bad?12000:7000)}
+'use strict';function tr(value){return globalThis.dracoI18n?globalThis.dracoI18n.translate(value):value}let csrf='',busy=false;const $=id=>document.getElementById(id);const txt=(id,value)=>{$(id).textContent=value??'–'};async function api(path,opts={}){const r=await fetch('?api='+path,{credentials:'same-origin',cache:'no-store',...opts});const d=await r.json();if(!r.ok)throw Error(tr(d.error||d.message||tr('Anfrage fehlgeschlagen')));return d}let noticeTimer=null;
+function showNotice(s,bad=false,persistent=false){const el=$('notice');if(noticeTimer)clearTimeout(noticeTimer);el.hidden=false;el.textContent=tr(s);el.classList.toggle('bad',bad);el.classList.toggle('pending',persistent);if(!persistent)noticeTimer=setTimeout(()=>{el.hidden=true;noticeTimer=null},bad?12000:7000)}
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function awaitJob(name,jobId){
  const deadline=Date.now()+30*60*1000;
@@ -7,18 +7,18 @@ async function awaitJob(name,jobId){
   await sleep(2000);
   try{
    const d=await api('job-status&id='+encodeURIComponent(jobId));
-   if(['queued','running'].includes(d.state)){showNotice(d.message||'Hintergrundauftrag läuft …',false,true);continue;}
+   if(['queued','running'].includes(d.state)){showNotice(d.message||tr('Hintergrundauftrag läuft …'),false,true);continue;}
    if(d.state==='success'){
-    showNotice(d.message||'Auftrag erfolgreich abgeschlossen.');
-    refreshAll();return;
+    showNotice(d.message||tr('Auftrag erfolgreich abgeschlossen.'));
+    refreshAll();return true;
    }
-   showNotice(d.message||'Auftrag fehlgeschlagen. Bitte Protokoll prüfen.',true);
+   showNotice(d.message||tr('Auftrag fehlgeschlagen. Bitte Protokoll prüfen.'),true);
    refreshAll();return;
   }catch(e){
    // Temporary HTTP errors do not imply a failed background job.
   }
  }
- showNotice('Der Auftrag konnte innerhalb von 30 Minuten nicht bestätigt werden. Bitte Protokoll prüfen.',true);
+ showNotice(tr('Der Auftrag konnte innerhalb von 30 Minuten nicht bestätigt werden. Bitte Protokoll prüfen.'),true);
 }
 function showApp(){ $('login').hidden=true;$('app').hidden=false;refreshAll()}function fmt(n){if(n===null||n===undefined)return '–';return (n/1073741824).toFixed(1)+' GB'}function renderServerInfo(d){
  const el=$('bedrockDetails');el.replaceChildren();
@@ -26,15 +26,15 @@ function showApp(){ $('login').hidden=true;$('app').hidden=false;refreshAll()}fu
  const modeNames={'0':'Survival','1':'Creative','2':'Adventure','survival':'Survival','creative':'Creative','adventure':'Adventure'};
  const val=(v)=>v===undefined||v===null||v===''?'–':String(v);
  const fields=[
-  ['Servername',b.name||props['server-name'],'server'],
-  ['Weltname',b.level||props['level-name'],'world'],
-  ['Bedrock-Version',b.version||d.version,'version'],
-  ['Spielmodus',modeNames[String(b.gameType??props.gamemode)]||props.gamemode,'mode'],
-  ['Schwierigkeit',props.difficulty,'difficulty'],
-  ['Spieler',b.players!==undefined?`${b.players} / ${b.maxPlayers}`:props['max-players']?`– / ${props['max-players']}`:null,'players'],
+  [tr('Servername'),b.name||props['server-name'],'server'],
+  [tr('Weltname'),b.level||props['level-name'],'world'],
+  [tr('Bedrock-Version'),b.version||d.version,'version'],
+  [tr('Spielmodus'),modeNames[String(b.gameType??props.gamemode)]||props.gamemode,'mode'],
+  [tr('Schwierigkeit'),props.difficulty,'difficulty'],
+  [tr('Spieler'),b.players!==undefined?`${b.players} / ${b.maxPlayers}`:props['max-players']?`– / ${props['max-players']}`:null,'players'],
   ['Port (IPv4)',props['server-port'],'port'],
   ['Port (IPv6)',props['server-portv6'],'port'],
-  ['Online-Modus',props['online-mode']==='true'?'Aktiv':props['online-mode']==='false'?'Inaktiv':null,'shield']
+  [tr('Online-Modus'),props['online-mode']==='true'?'Aktiv':props['online-mode']==='false'?'Inaktiv':null,'shield']
  ];
  for(const [label,value,kind] of fields){
   const item=document.createElement('div');item.className='server-info-item';
@@ -44,29 +44,29 @@ function showApp(){ $('login').hidden=true;$('app').hidden=false;refreshAll()}fu
  }
  if(!d.nethernet_online){
   const note=document.createElement('p');note.className='server-info-note';
-  note.textContent=d.nethernet_error||('NetherNet antwortet auf Port '+(d.nethernet_port||'?')+' momentan nicht. Die Konfigurationswerte stammen aus server.properties.');
+  note.textContent=d.nethernet_error||(tr('NetherNet antwortet auf Port ')+(d.nethernet_port||'?')+tr(' momentan nicht. Die Konfigurationswerte stammen aus server.properties.'));
   el.append(note);
  }
 }
 function renderSystemMetrics(d){
  const root=$('systemInfo');root.replaceChildren();const m=d.system_metrics||{};
- const bytes=n=>Number.isFinite(n)?(n/1073741824).toLocaleString('de-DE',{maximumFractionDigits:2})+' GiB':'–';
- const number=n=>Number.isFinite(n)?n.toLocaleString('de-DE',{maximumFractionDigits:2}):'–';
+ const bytes=n=>Number.isFinite(n)?(n/1073741824).toLocaleString((globalThis.dracoI18n?.locale||'de-DE'),{maximumFractionDigits:2})+' GiB':'–';
+ const number=n=>Number.isFinite(n)?n.toLocaleString((globalThis.dracoI18n?.locale||'de-DE'),{maximumFractionDigits:2}):'–';
  const hours=n=>Number.isFinite(n)?`${Math.floor(n/86400)} T · ${Math.floor(n%86400/3600)} Std`:'–';
  const items=[
-  ['RAM verfügbar',bytes(m.ram_total),m.ram_scope||''],
-  ['RAM verwendet',bytes(m.ram_used),m.ram_total&&m.ram_used!==null?`${Math.round(100*m.ram_used/m.ram_total)} % belegt`:''],
-  ['CPU-Kapazität',number(m.cpu_count),'Für Container verfügbar (ggf. Quota)'],
-  ['Sichtbare CPUs',number(m.cpu_physical_visible),'Logische Prozessoren'],
-  ['Systemlaufzeit',hours(m.uptime_seconds),'Seit letztem Start'],
-  ['Systemlast',Array.isArray(m.load_average)?m.load_average.map(number).join(' / '):'–','1 / 5 / 15 Minuten']
+  [tr('RAM verfügbar'),bytes(m.ram_total),m.ram_scope||''],
+  [tr('RAM verwendet'),bytes(m.ram_used),m.ram_total&&m.ram_used!==null?`${Math.round(100*m.ram_used/m.ram_total)} % belegt`:''],
+  [tr('CPU-Kapazität'),number(m.cpu_count),tr('Für Container verfügbar (ggf. Quota)')],
+  [tr('Sichtbare CPUs'),number(m.cpu_physical_visible),tr('Logische Prozessoren')],
+  ['Systemlaufzeit',hours(m.uptime_seconds),tr('Seit letztem Start')],
+  ['Systemlast',Array.isArray(m.load_average)?m.load_average.map(number).join(' / '):'–',tr('1 / 5 / 15 Minuten')]
  ];
  for(const [label,value,detail] of items){const card=document.createElement('div');card.className='system-metric';
   const a=document.createElement('span');a.className='system-metric-label';a.textContent=label;
   const b=document.createElement('strong');b.className='system-metric-value';b.textContent=value;
   const c=document.createElement('small');c.className='system-metric-detail';c.textContent=detail;
   card.append(a,b,c);
-  if(label==='RAM verwendet'&&m.ram_total>0&&Number.isFinite(m.ram_used)){
+  if(label===tr('RAM verwendet')&&m.ram_total>0&&Number.isFinite(m.ram_used)){
    const bar=document.createElement('div');bar.className='system-ram-track';bar.setAttribute('role','progressbar');bar.setAttribute('aria-label','RAM-Auslastung');bar.setAttribute('aria-valuemin','0');bar.setAttribute('aria-valuemax','100');const pct=Math.min(100,Math.max(0,100*m.ram_used/m.ram_total));bar.setAttribute('aria-valuenow',String(Math.round(pct)));
    const fill=document.createElement('span');fill.style.width=pct+'%';if(pct>=90)fill.classList.add('critical');else if(pct>=75)fill.classList.add('warning');bar.append(fill);card.append(bar);
   }
@@ -77,16 +77,16 @@ function renderSystemMetrics(d){
 async function status(){try{
  const d=await api('status');csrf=d.csrf;
  const state=d.online?(d.nethernet_online?'online':'starting'):(['activating','reloading'].includes(d.service)?'starting':d.service==='failed'?'failed':'offline');
- const names={online:'ONLINE',starting:d.online?'NET HERNET STARTET …':'STARTET …',offline:'OFFLINE',failed:'FEHLER'};
- names.starting=d.online?'INITIALISIERT …':'STARTET …';
+ const names={online:'ONLINE',starting:d.online?tr('NET HERNET STARTET …'):tr('STARTET …'),offline:'OFFLINE',failed:tr('FEHLER')};
+ names.starting=d.online?tr('INITIALISIERT …'):tr('STARTET …');
  txt('state',names[state]);$('state').className='server-state '+state;
  txt('version',d.version);txt('updateVersion',d.version);
  txt('players',d.bedrock?d.bedrock.players+' / '+d.bedrock.maxPlayers:'– / –');
- txt('playerCount',d.bedrock?'Aktuell '+d.bedrock.players+' von '+d.bedrock.maxPlayers+' Spielern online':'Spielerzahl nicht verfügbar');
- txt('nethernet',d.nethernet_error|| (d.nethernet_online?'NetherNet erreichbar (Port '+d.nethernet_port+')':'NetherNet nicht erreichbar (Port '+(d.nethernet_port||'?')+')'));
+ txt('playerCount',d.bedrock?'Aktuell '+d.bedrock.players+tr(' von ')+d.bedrock.maxPlayers+tr(' Spielern online'):tr('Spielerzahl nicht verfügbar'));
+ txt('nethernet',d.nethernet_error|| (d.nethernet_online?tr('NetherNet erreichbar (Port ')+d.nethernet_port+')':tr('NetherNet nicht erreichbar (Port ')+(d.nethernet_port||'?')+')'));
  renderServerInfo(d);txt('disk',fmt(d.free_bytes));renderSystemMetrics(d);txt('updateInfo',d.update_job);
- const p=$('statusPill');p.textContent={online:'● Server online',starting:'● Server startet / NetherNet wartet',offline:'● Server offline',failed:'● Serverfehler'}[state];p.className='pill '+state;
- }catch(e){if(e.message==='Nicht angemeldet'){$('app').hidden=true;$('login').hidden=false;return;}showNotice(e.message,true)}
+ const p=$('statusPill');p.textContent={online:'● Server online',starting:tr('● Server startet / NetherNet wartet'),offline:'● Server offline',failed:tr('● Serverfehler')}[state];p.className='pill '+state;
+ }catch(e){if(e.message===tr('Nicht angemeldet')){$('app').hidden=true;$('login').hidden=false;return;}showNotice(e.message,true)}
 }
 // Check Mojang's official stable Linux Bedrock version without downloading a server.
 let bedrockVersionBusy=false,bedrockVersionCheckedAt=0;
@@ -95,27 +95,27 @@ async function loadBedrockUpdate(force=false){
  if(!force && bedrockVersionCheckedAt && Date.now()-bedrockVersionCheckedAt<3600000)return;
  bedrockVersionBusy=true;
  const state=$('bedrockUpdateState'),action=$('bedrockUpdateAction'),panel=$('bedrockUpdateInfo');
- state.textContent='Mojang-Version wird geprüft …';
+ state.textContent=tr('Mojang-Version wird geprüft …');
  action.hidden=true;
  panel.classList.remove('update-available','update-current','update-unknown');
  try{
   const d=await api('bedrock-update-check');
   if(d.ok!==true||typeof d.latest_version!=='string'||!/^[0-9]+(?:\.[0-9]+){2,4}$/.test(d.latest_version))
-   throw Error('Ungültige Versionsantwort');
+   throw Error(tr('Ungültige Versionsantwort'));
   if(d.update_available===true){
-   state.textContent='Update verfügbar: '+d.latest_version;
+   state.textContent=tr('Update verfügbar: ')+d.latest_version;
    panel.classList.add('update-available');
    action.hidden=false;
   }else if(d.update_available===false){
-   state.textContent='Mojang: aktuell ('+d.latest_version+')';
+   state.textContent=tr('Mojang: aktuell (')+d.latest_version+')';
    panel.classList.add('update-current');
   }else{
-   state.textContent='Mojang: '+d.latest_version+' · installierte Version unbekannt';
+   state.textContent='Mojang: '+d.latest_version+tr(' · installierte Version unbekannt');
    panel.classList.add('update-unknown');
   }
   bedrockVersionCheckedAt=Date.now();
  }catch(e){
-  state.textContent='Mojang-Prüfung nicht verfügbar';
+  state.textContent=tr('Mojang-Prüfung nicht verfügbar');
   panel.classList.add('update-unknown');
   // Retry errors in ten minutes rather than on every status refresh.
   bedrockVersionCheckedAt=Date.now()-3000000;
@@ -137,9 +137,9 @@ const monitorUnitValue=(value,kind)=>kind==='ram'?value/1073741824:value;
 const monitorFormat=(value,kind)=>{
  if(!Number.isFinite(value))return '–';
  const n=monitorUnitValue(value,kind);
- return n.toLocaleString('de-DE',{minimumFractionDigits:kind==='players'?0:2,maximumFractionDigits:kind==='players'?1:2})+(kind==='cpu'?' %':kind==='ram'?' GiB':'');
+ return n.toLocaleString((globalThis.dracoI18n?.locale||'de-DE'),{minimumFractionDigits:kind==='players'?0:2,maximumFractionDigits:kind==='players'?1:2})+(kind==='cpu'?' %':kind==='ram'?' GiB':'');
 };
-const monitorDate=(ts)=>new Date(ts*1000).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+const monitorDate=(ts)=>new Date(ts*1000).toLocaleString((globalThis.dracoI18n?.locale||'de-DE'),{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
 function monitorStats(points,key){
  const values=points.map(p=>p[key]).filter(v=>Number.isFinite(v));
  if(!values.length)return null;
@@ -150,8 +150,8 @@ function updateMonitorSummaries(){
   const stats=monitorStats(monitoringPoints,def.key);
   const unknown=monitoringPoints.filter(p=>p.samples>0&&!Number.isFinite(p[def.key])).length;
   txt(def.summary,stats
-    ?'Min '+monitorFormat(stats.min,def.kind)+' · Ø '+monitorFormat(stats.mean,def.kind)+' · Max '+monitorFormat(stats.max,def.kind)+(unknown?' · '+unknown+' ohne Wert':'')
-    :'Keine gültigen Messwerte im Zeitraum'+(unknown?' · '+unknown+' ohne Wert':''));
+    ?'Min '+monitorFormat(stats.min,def.kind)+' · Ø '+monitorFormat(stats.mean,def.kind)+' · Max '+monitorFormat(stats.max,def.kind)+(unknown?' · '+unknown+tr(' ohne Wert'):'')
+    :tr('Keine gültigen Messwerte im Zeitraum')+(unknown?' · '+unknown+tr(' ohne Wert'):''));
  }
 }
 function monitorX(index,total,width){
@@ -198,7 +198,7 @@ function drawMonitorChart(canvas,points,def){
  ctx.globalAlpha=.8;ctx.fillStyle=foreground;
  for(let i=0;i<=steps;i++){
   const v=ceiling*(steps-i)/steps;
-  const label=v.toLocaleString('de-DE',{maximumFractionDigits:def.kind==='players'?0:2});
+  const label=v.toLocaleString((globalThis.dracoI18n?.locale||'de-DE'),{maximumFractionDigits:def.kind==='players'?0:2});
   ctx.fillText(label,3,top+plotH*i/steps+4);
  }
  // The fixed-size buckets returned by the API align across all three plots.
@@ -208,14 +208,14 @@ function drawMonitorChart(canvas,points,def){
  for(let i=0;i<=tickCount;i++){
   const index=Math.round(i*(points.length-1)/Math.max(1,tickCount));
   const point=points[index];if(!point)continue;
-  const label=new Date(point.ts*1000).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  const label=new Date(point.ts*1000).toLocaleString((globalThis.dracoI18n?.locale||'de-DE'),{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
   const x=monitorX(index,points.length,width);
   const size=ctx.measureText(label).width;
   ctx.fillText(label,Math.max(left,Math.min(width-right-size,x-size/2)),height-9);
  }
  if(!valid.length){
   ctx.globalAlpha=1;ctx.font='13px system-ui,sans-serif';
-  ctx.fillText('Keine gültigen Messwerte im Zeitraum',left+6,top+plotH/2);
+  ctx.fillText(tr('Keine gültigen Messwerte im Zeitraum'),left+6,top+plotH/2);
  }else{
   ctx.globalAlpha=1;ctx.lineWidth=2.2;ctx.strokeStyle=color;ctx.lineCap='round';ctx.lineJoin='round';
   let segment=false;
@@ -259,9 +259,9 @@ function monitorTooltip(){
   const p=monitoringPoints[monitorHoverIndex];
   const estimate=monitorDisplayValues(monitoringPoints,def.key)[monitorHoverIndex];
   const value=Number.isFinite(p[def.key])?monitorFormat(p[def.key],def.kind):
-    Number.isFinite(estimate)?'≈ '+monitorFormat(estimate,def.kind)+' (geschätzt)':
-    p.samples===0?'Keine Messung':'Wert nicht verfügbar';
-  const aggregate=p.samples>1?' · Ø aus '+p.samples+' Messungen':'';
+    Number.isFinite(estimate)?'≈ '+monitorFormat(estimate,def.kind)+tr(' (geschätzt)'):
+    p.samples===0?tr('Keine Messung'):tr('Wert nicht verfügbar');
+  const aggregate=p.samples>1?tr(' · Ø aus ')+p.samples+tr(' Messungen'):'';
   tooltip.textContent=monitorDate(p.ts)+' · '+value+aggregate;
   const canvas=$(def.id),width=canvas.getBoundingClientRect().width;
   const x=monitorX(monitorHoverIndex,monitoringPoints.length,width);
@@ -308,11 +308,11 @@ function renderMonitoringAlerts(alerts){
  root.replaceChildren();
  if(!Array.isArray(alerts)){
   const note=document.createElement('p');note.className='muted tiny';
-  note.textContent='Warnstatus derzeit nicht verfügbar.';root.append(note);return;
+  note.textContent=tr('Warnstatus derzeit nicht verfügbar.');root.append(note);return;
  }
  if(!alerts.length){
   const ok=document.createElement('div');ok.className='monitor-alert monitor-alert-ok';
-  ok.textContent='✓ Keine aktuellen Warnungen – Monitoring und Dienstwerte unauffällig.';
+  ok.textContent=tr('✓ Keine aktuellen Warnungen – Monitoring und Dienstwerte unauffällig.');
   root.append(ok);return;
  }
  for(const alert of alerts.slice(0,8)){
@@ -333,12 +333,12 @@ async function loadDashboardAlerts(){
   const data=await api('monitor-history&window=1h');
   const root=$('dashboardAlerts');
   root.replaceChildren();
-  if(!Array.isArray(data.alerts))throw Error('Warnstatus fehlt');
+  if(!Array.isArray(data.alerts))throw Error(tr('Warnstatus fehlt'));
   const alerts=data.alerts.slice(0,8);
   if(!alerts.length){
    const ok=document.createElement('div');
    ok.className='monitor-alert monitor-alert-ok';
-   ok.textContent='✓ Keine aktuellen Warnungen – Monitoring unauffällig.';
+   ok.textContent=tr('✓ Keine aktuellen Warnungen – Monitoring unauffällig.');
    root.append(ok);
   }else{
    for(const alert of alerts){
@@ -354,14 +354,14 @@ async function loadDashboardAlerts(){
   const root=$('dashboardAlerts');
   root.replaceChildren();
   const note=document.createElement('p');note.className='muted tiny';
-  note.textContent='Warnstatus nicht verfügbar – Live-Monitoring prüfen.';
+  note.textContent=tr('Warnstatus nicht verfügbar – Live-Monitoring prüfen.');
   root.append(note);
  }finally{dashboardAlertsBusy=false}
 }
 $('dashboardAlertsDetail').addEventListener('click',()=>document.querySelector('[data-tab="monitor"]').click());
 setInterval(()=>{if(!$('app').hidden&&!$('overview').hidden)loadDashboardAlerts()},60000);
 let playerHistoryBusy=false;
-const playerHistoryDate=new Intl.DateTimeFormat('de-DE',{
+const playerHistoryDate=new Intl.DateTimeFormat((globalThis.dracoI18n?.locale||'de-DE'),{
  dateStyle:'short',timeStyle:'short',timeZone:'Europe/Berlin'
 });
 async function loadPlayerHistory(){
@@ -386,9 +386,9 @@ async function loadPlayerHistory(){
   }
   body.replaceChildren(content);
   table.hidden=!data.sessions.length;
-  const status=data.sessions.length?data.sessions.length+' beobachtete Abschnitte':'Keine Spieler im erfassten Zeitraum beobachtet.';
-  txt('playerHistoryState',data.first_sample===null?'Warte auf die erste Messung.':
-      status+' · Messdaten im Zeitfenster seit '+playerHistoryDate.format(data.first_sample*1000)+' (Berlin)');
+  const status=data.sessions.length?data.sessions.length+tr(' beobachtete Abschnitte'):tr('Keine Spieler im erfassten Zeitraum beobachtet.');
+  txt('playerHistoryState',data.first_sample===null?tr('Warte auf die erste Messung.'):
+      status+tr(' · Messdaten im Zeitfenster seit ')+playerHistoryDate.format(data.first_sample*1000)+' (Berlin)');
  }catch(e){
   table.hidden=true;
   txt('playerHistoryState',e.message);
@@ -397,23 +397,23 @@ async function loadPlayerHistory(){
 async function loadMonitoring(){
  loadPlayerHistory();
  if(monitoringBusy)return;
- monitoringBusy=true;txt('monitorState','Lade historische Messwerte …');
+ monitoringBusy=true;txt('monitorState',tr('Lade historische Messwerte …'));
  try{
   const d=await api('monitor-history&window='+encodeURIComponent(monitoringWindow));
-  if(!Array.isArray(d.points)||d.points.length>450)throw Error('Ungültige Monitoring-Antwort');
+  if(!Array.isArray(d.points)||d.points.length>450)throw Error(tr('Ungültige Monitoring-Antwort'));
   monitoringPoints=d.points;
   renderMonitoringAlerts(d.alerts);
   monitorHoverIndex=null;monitorHoverMetric=null;
   const latest=d.latest;
   const fresh=latest && Number.isInteger(latest.ts) && Date.now()/1000-latest.ts<180;
-  txt('monitorCpu',fresh && Number.isFinite(latest.cpu_pct)?latest.cpu_pct.toLocaleString('de-DE',{maximumFractionDigits:1})+' %':'–');
-  txt('monitorRam',fresh && Number.isFinite(latest.ram_bytes)?(latest.ram_bytes/1073741824).toLocaleString('de-DE',{maximumFractionDigits:2})+' GiB':'–');
+  txt('monitorCpu',fresh && Number.isFinite(latest.cpu_pct)?latest.cpu_pct.toLocaleString((globalThis.dracoI18n?.locale||'de-DE'),{maximumFractionDigits:1})+' %':'–');
+  txt('monitorRam',fresh && Number.isFinite(latest.ram_bytes)?(latest.ram_bytes/1073741824).toLocaleString((globalThis.dracoI18n?.locale||'de-DE'),{maximumFractionDigits:2})+' GiB':'–');
   txt('monitorPlayers',fresh && Number.isFinite(latest.players)?String(latest.players):'–');
-  txt('monitorTime',latest?new Date(latest.ts*1000).toLocaleTimeString('de-DE'):'–');
-  txt('monitorState',(Number.isInteger(d.samples_count)?d.samples_count:d.points.filter(p=>p.samples>0).length)+' Messungen · Intervall 60 Sekunden · '+(fresh?'Aktuelle Messungen verfügbar':'Keine aktuelle Messung – Timer prüfen'));
+  txt('monitorTime',latest?new Date(latest.ts*1000).toLocaleTimeString((globalThis.dracoI18n?.locale||'de-DE')):'–');
+  txt('monitorState',(Number.isInteger(d.samples_count)?d.samples_count:d.points.filter(p=>p.samples>0).length)+tr(' Messungen · Intervall 60 Sekunden · ')+(fresh?tr('Aktuelle Messungen verfügbar'):tr('Keine aktuelle Messung – Timer prüfen')));
   updateMonitorSummaries();
   redrawMonitoring();monitorTooltip();
- }catch(e){renderMonitoringAlerts(null);monitoringPoints=[];monitorHoverIndex=null;monitorHoverMetric=null;updateMonitorSummaries();redrawMonitoring();monitorTooltip();txt('monitorState','Monitoring nicht verfügbar: '+e.message)}
+ }catch(e){renderMonitoringAlerts(null);monitoringPoints=[];monitorHoverIndex=null;monitorHoverMetric=null;updateMonitorSummaries();redrawMonitoring();monitorTooltip();txt('monitorState',tr('Monitoring nicht verfügbar: ')+e.message)}
  finally{monitoringBusy=false}
 }
 $('monitorReload').addEventListener('click',loadMonitoring);
@@ -427,30 +427,90 @@ function backupSize(bytes){
  if(bytes>=1024)return (bytes/1024).toFixed(1)+' KiB';
  return bytes+' B';
 }
+let scheduleDirty=false, restoreSelection=null,restoreRequest=0;
+function updateScheduleForm(settings){
+ if(scheduleDirty||!settings)return;
+ $('scheduleEnabled').checked=settings.enabled;
+ $('scheduleTime').value=settings.time;
+ $('scheduleRetry').value=settings.retry_minutes;
+ for(const input of $('scheduleDays').querySelectorAll('input'))input.checked=settings.days.includes(Number(input.value));
+}
+for(const [index,name] of [tr('Montag'),tr('Dienstag'),tr('Mittwoch'),tr('Donnerstag'),tr('Freitag'),tr('Samstag'),tr('Sonntag')].entries()){
+ const label=document.createElement('label'),input=document.createElement('input');
+ input.type='checkbox';input.value=String(index);input.checked=true;
+ label.append(input,document.createTextNode(name));$('scheduleDays').append(label);
+}
+$('scheduleForm').addEventListener('input',()=>{scheduleDirty=true});
+$('scheduleForm').addEventListener('submit',async event=>{
+ event.preventDefault();
+ const button=event.submitter;button.disabled=true;
+ try{
+  await api('backup-schedule',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({
+   enabled:$('scheduleEnabled').checked,time:$('scheduleTime').value,
+   days:[...$('scheduleDays').querySelectorAll('input:checked')].map(input=>Number(input.value)),
+   retry_minutes:Number($('scheduleRetry').value)
+  })});
+  scheduleDirty=false;txt('scheduleStatus',tr('Backup-Zeitplan gespeichert.'));await loadMaintenance();
+ }catch(error){txt('scheduleStatus',error.message)}
+ finally{button.disabled=false}
+});
+async function openRestore(file){
+ const revision=++restoreRequest;
+ restoreSelection=null;
+ $('restoreForm').reset();$('restoreTarget').replaceChildren();
+ txt('restoreArchive',file.name);txt('restoreDetails',tr('Archivstruktur wird geprüft …'));
+ txt('restoreStatus','');$('restoreSubmit').disabled=true;$('restoreDialog').showModal();
+ try{
+  const preview=await api('restore-preview',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({id:file.id})});
+  if(!$('restoreDialog').open||revision!==restoreRequest)return;
+  restoreSelection=file;
+  for(const target of preview.targets)$('restoreTarget').append(new Option(target,target));
+  txt('restoreDetails',preview.files+tr(' Dateien · ')+backupSize(preview.bytes));
+  $('restoreSubmit').disabled=!preview.targets.length;
+  await refreshRestoreState();
+ }catch(error){txt('restoreStatus',error.message)}
+}
+$('restoreCancel').addEventListener('click',()=>{$('restoreDialog').close();restoreSelection=null});
+$('restoreStop').addEventListener('click',async()=>{await action('stop');await refreshRestoreState()});
+$('restoreForm').addEventListener('submit',async event=>{
+ event.preventDefault();
+ if(!restoreSelection||busy)return;
+ busy=true;$('restoreSubmit').disabled=true;$('restoreCancel').disabled=true;
+ try{
+  const result=await api('restore-world',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({id:restoreSelection.id,target:$('restoreTarget').value})});
+  txt('restoreStatus',tr('Die Zielwelt wird gesichert und wiederhergestellt. Bitte warten.'));
+  if(await awaitJob('restore-world',result.job_id)){
+   $('restoreDialog').close();restoreSelection=null;
+   await loadWorlds();
+  }else{txt('restoreStatus',tr('Wiederherstellung fehlgeschlagen. Bitte den Auftragsverlauf prüfen.'))}
+ }catch(error){txt('restoreStatus',error.message)}
+ finally{busy=false;$('restoreSubmit').disabled=false;$('restoreCancel').disabled=false}
+});
 async function loadMaintenance(){
  try{
   const data=await api('maintenance');
-  const labels={waiting:'Wartet',running:'Läuft',success:'Erfolgreich',failed:'Fehlgeschlagen',skipped:'Übersprungen',queued:'Vorgemerkt',interrupted:'Unterbrochen'};
-  const format=stamp=>new Date(stamp*1000).toLocaleString('de-DE');
+  const labels={waiting:tr('Wartet'),running:tr('Läuft'),success:tr('Erfolgreich'),failed:tr('Fehlgeschlagen'),skipped:tr('Übersprungen'),queued:tr('Vorgemerkt'),interrupted:tr('Unterbrochen')};
+  const format=stamp=>new Date(stamp*1000).toLocaleString((globalThis.dracoI18n?.locale||'de-DE'));
   const last=data.last_success;
-  const summary=last?'Letzter erfolgreich abgeschlossener Backup-Auftrag: '+format(last.updated_at):'Noch kein erfolgreicher Backup-Auftrag im neuen Verlauf erfasst.';
+  const summary=last?tr('Letzter erfolgreich abgeschlossener Backup-Auftrag: ')+format(last.updated_at):tr('Noch kein erfolgreicher Backup-Auftrag im neuen Verlauf erfasst.');
   txt('backupSummary',summary);
   txt('backupSummaryDetail',summary);
+  updateScheduleForm(data.settings);
   const schedule=data.schedule;
   const next=data.timer.NextElapseUSecRealtime;
-  txt('backupSchedule',(schedule.state?(labels[schedule.state]||schedule.state)+' · '+schedule.message+' ':'')+(next?'Nächster täglicher Termin: '+next:'Backup-Timer hat keinen nächsten Termin.'));
+  txt('backupSchedule',!data.settings.enabled?tr('Geplante Backups sind deaktiviert.'):(schedule.state?(labels[schedule.state]||schedule.state)+' · '+tr(schedule.message)+' ':'')+(next?tr('Nächster täglicher Termin: ')+next:tr('Backup-Timer hat keinen nächsten Termin.')));
   const checks=$('systemChecks');checks.replaceChildren();
   for(const check of data.checks){
    const row=document.createElement('p');
-   row.textContent=(check.ok?'✓ ':'⚠ ')+check.name+' — '+check.message;
+   row.textContent=(check.ok?'✓ ':'⚠ ')+tr(check.name)+' — '+tr(check.message);
    row.className=check.ok?'maintenance-ok':'maintenance-warning';
    checks.append(row);
   }
   const select=$('jobHistory'), selected=select.value;
-  select.replaceChildren(new Option('Aktueller Lauf',''));
+  select.replaceChildren(new Option(tr('Aktueller Lauf'),''));
   for(const job of data.jobs){
    if(!/^[a-f0-9]{32}$/.test(job.invocation||''))continue;
-   const actions={backup:'Backup',update:'Minecraft-Update',start:'Start',stop:'Stopp',restart:'Neustart'};
+   const actions={backup:'Backup',update:tr('Minecraft-Update'),start:'Start',stop:tr('Stopp'),restart:tr('Neustart'),'restore-world':tr('Wiederherstellung')};
    const option=new Option(format(job.started_at||job.updated_at)+' · '+actions[job.action]+' · '+(labels[job.state]||job.state),job.invocation);
    option.dataset.type=['start','stop','restart'].includes(job.action)?'server':'update';
    select.append(option);
@@ -463,12 +523,12 @@ async function loadMaintenance(){
 }
 setInterval(()=>{if(!$('app').hidden)loadMaintenance()},30000);
 async function deleteBackup(file,button){
- if(!window.confirm('Backup „'+file.name+'“ vom '+file.date+' ('+backupSize(file.size)+') endgültig löschen? Diese Sicherung wird dauerhaft entfernt.'))return;
+ if(!window.confirm('Backup „'+file.name+tr('“ vom ')+file.date+' ('+backupSize(file.size)+tr(') endgültig löschen? Diese Sicherung wird dauerhaft entfernt.')))return;
  button.disabled=true;
  try{
   await api('backup-delete',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({id:file.id})});
   await backups();
-  showNotice('Backup gelöscht.');
+  showNotice(tr('Backup gelöscht.'));
  }catch(error){
   showNotice(error.message,true);
   button.disabled=false;
@@ -477,7 +537,7 @@ async function deleteBackup(file,button){
 function renderBackupList(id,files){
  const list=$(id);
  list.replaceChildren();
- if(!files.length){list.textContent='Noch keine Backups vorhanden.';return}
+ if(!files.length){list.textContent=tr('Noch keine Backups vorhanden.');return}
  for(const file of files){
   const row=document.createElement('div'), info=document.createElement('span'), detail=document.createElement('small');
   const actions=document.createElement('span'), link=document.createElement('button'), remove=document.createElement('button');
@@ -487,15 +547,19 @@ function renderBackupList(id,files){
   info.append(detail);
   actions.className='backup-entry-actions';
   link.className='secondary';
-  link.textContent='ZIP herunterladen';
+  link.textContent=tr('ZIP herunterladen');
   link.type='button';
   link.addEventListener('click',()=>window.location.assign('?api=backup-download&id='+encodeURIComponent(file.id)));
-  link.setAttribute('aria-label','ZIP herunterladen: '+file.name);
+  link.setAttribute('aria-label',tr('ZIP herunterladen: ')+file.name);
   remove.className='danger';
   remove.type='button';
-  remove.textContent='Löschen';
-  remove.setAttribute('aria-label','Backup löschen: '+file.name);
+  remove.textContent=tr('Löschen');
+  remove.setAttribute('aria-label',tr('Backup löschen: ')+file.name);
   remove.addEventListener('click',()=>deleteBackup(file,remove));
+  if(id==='backupWorldList'){
+   const restore=document.createElement('button');restore.type='button';restore.className='secondary';
+   restore.textContent=tr('Wiederherstellen');restore.addEventListener('click',()=>openRestore(file));actions.append(restore);
+  }
   actions.append(link,remove);
   row.append(info,actions);
   list.append(row);
@@ -506,26 +570,26 @@ async function backups(){
   const data=await api('backups');
   renderBackupList('backupWorldList',data.worlds);
   renderBackupList('backupServerList',data.server);
-  txt('backupStorage','Gesamter Backup-Speicher: '+backupSize(data.total_bytes));
+  txt('backupStorage',tr('Gesamter Backup-Speicher: ')+backupSize(data.total_bytes));
  }catch(e){
-  txt('backupStorage','Gesamter Backup-Speicher konnte nicht geladen werden.');
+  txt('backupStorage',tr('Gesamter Backup-Speicher konnte nicht geladen werden.'));
   txt('backupWorldList',e.message);
   txt('backupServerList',e.message);
   showNotice(e.message,true);
  }
 }
-async function logs(){try{const d=await api('logs&type='+encodeURIComponent($('logType').value)+'&invocation='+encodeURIComponent($('jobHistory').value));txt('logOutput',d.logs||'Keine Einträge.')}catch(e){showNotice(e.message,true)}}function refreshAll(){status();backups();loadMaintenance();logs();loadDashboardAlerts();loadBedrockUpdate()}async function action(name){
+async function logs(){try{const d=await api('logs&type='+encodeURIComponent($('logType').value)+'&invocation='+encodeURIComponent($('jobHistory').value));txt('logOutput',d.logs||tr('Keine Einträge.'))}catch(e){showNotice(e.message,true)}}function refreshAll(){status();backups();loadMaintenance();logs();loadDashboardAlerts();loadBedrockUpdate()}async function action(name){
  if(busy)return;
- const labels={start:'Server starten',stop:'Server stoppen',restart:'Server neu starten',update:'Update starten (Server wird ggf. neu gestartet)',backup:'Backup erstellen (kurze Unterbrechung möglich)'};
+ const labels={start:tr('Server starten'),stop:tr('Server stoppen'),restart:tr('Server neu starten'),update:tr('Update starten (Server wird ggf. neu gestartet)'),backup:tr('Backup erstellen (kurze Unterbrechung möglich)')};
  if(!confirm(labels[name]+'?'))return;
  busy=true;document.querySelectorAll('[data-action]').forEach(b=>b.disabled=true);
  try{
-  showNotice(labels[name]+' – Auftrag wird ausgeführt …',false,true);
+  showNotice(labels[name]+tr(' – Auftrag wird ausgeführt …'),false,true);
   const d=await api('action',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({action:name})});
-  if(d.ok===false)throw Error(d.message||'Aktion fehlgeschlagen');
+  if(d.ok===false)throw Error(d.message||tr('Aktion fehlgeschlagen'));
   {
-   showNotice(labels[name]+' – Hintergrundauftrag läuft, Abschluss wird überwacht …',false,true);
-   if(!d.job_id)throw Error('Auftrag gestartet, aber keine Auftrags-ID empfangen. Bitte Protokoll prüfen.');
+   showNotice(labels[name]+tr(' – Hintergrundauftrag läuft, Abschluss wird überwacht …'),false,true);
+   if(!d.job_id)throw Error(tr('Auftrag gestartet, aber keine Auftrags-ID empfangen. Bitte Protokoll prüfen.'));
    await awaitJob(name,d.job_id);
   }
  }catch(e){showNotice(e.message,true)}
@@ -535,7 +599,7 @@ async function logs(){try{const d=await api('logs&type='+encodeURIComponent($('l
 // Build Markdown-like formatting with DOM text nodes (never innerHTML).
 function renderReleaseMarkdown(markdown){
  const container=$('panelReleaseNotes');container.replaceChildren();
- const lines=String(markdown||'Keine Release Notes hinterlegt.').replace(/\r\n?/g,'\n').split('\n');
+ const lines=String(markdown||tr('Keine Release Notes hinterlegt.')).replace(/\r\n?/g,'\n').split('\n');
  let list=null,code=null,paragraph=null;
  const inline=(parent,source)=>{
   const chunks=String(source).split(/(`[^`\n]+`|\*\*[^*\n]+\*\*|\[[^\]\n]+\]\(https:\/\/[^\s)]+\))/g);
@@ -569,12 +633,12 @@ function renderReleaseMarkdown(markdown){
 async function loadPanelSecurity(){
  try{
   const d=await api('panel-security');
-  txt('panelTrustKeyState',d.trusted_key_configured?'Gültig und eingerichtet':'Nicht einsatzbereit');
+  txt('panelTrustKeyState',d.trusted_key_configured?tr('Gültig und eingerichtet'):tr('Nicht einsatzbereit'));
   txt('panelTrustKeyFingerprint',d.trusted_key_configured && /^[0-9a-f]{64}$/.test(d.trusted_key_fingerprint||'')
-   ? 'SHA-256 (öffentlicher PEM): '+d.trusted_key_fingerprint.match(/.{1,16}/g).join(' ')
-   : (d.trusted_key_error||'Kein Fingerabdruck verfügbar'));
-  txt('panelAutoInstallState','Prüfe Verfügbarkeit …');
- }catch(e){txt('panelTrustKeyState','Prüfung fehlgeschlagen');txt('panelTrustKeyFingerprint','Schlüsselstatus konnte nicht geladen werden.');}
+   ? tr('SHA-256 (öffentlicher PEM): ')+d.trusted_key_fingerprint.match(/.{1,16}/g).join(' ')
+   : (d.trusted_key_error||tr('Kein Fingerabdruck verfügbar')));
+  txt('panelAutoInstallState',tr('Prüfe Verfügbarkeit …'));
+ }catch(e){txt('panelTrustKeyState',tr('Prüfung fehlgeschlagen'));txt('panelTrustKeyFingerprint',tr('Schlüsselstatus konnte nicht geladen werden.'));}
 }
 let panelSelectedChannel='stable';
 async function loadPanelChannel(){
@@ -582,13 +646,13 @@ async function loadPanelChannel(){
   const d=await api('panel-update-channel');
   panelSelectedChannel=d.channel==='test'?'test':'stable';
   $('panelUpdateChannel').value=panelSelectedChannel;
-  txt('panelChannelState',panelSelectedChannel==='test'?'Testkanal aktiv – veröffentlichte Pre-Releases':'Stabiler Kanal aktiv');
- }catch(e){txt('panelChannelState','Updatekanal nicht lesbar: '+e.message);$('panelStartUpdate').disabled=true;}
+  txt('panelChannelState',panelSelectedChannel==='test'?tr('Testkanal aktiv – veröffentlichte Pre-Releases'):tr('Stabiler Kanal aktiv'));
+ }catch(e){txt('panelChannelState',tr('Updatekanal nicht lesbar: ')+e.message);$('panelStartUpdate').disabled=true;}
 }
 $('panelSaveUpdateChannel').addEventListener('click',async()=>{
  const channel=$('panelUpdateChannel').value;
  if(!['stable','test'].includes(channel))return;
- if(channel==='test'&&!confirm('Testkanal aktivieren? Pre-Releases sind möglicherweise instabil und sollten nur auf dem Testserver installiert werden.'))return;
+ if(channel==='test'&&!confirm(tr('Testkanal aktivieren? Pre-Releases sind möglicherweise instabil und sollten nur auf dem Testserver installiert werden.')))return;
  $('panelSaveUpdateChannel').disabled=true;
  try{
   await api('panel-update-channel',{method:'POST',headers:{'X-CSRF-Token':csrf,'Content-Type':'application/json'},body:JSON.stringify({channel})});
@@ -601,7 +665,7 @@ async function loadPanelRelease(){
  loadPanelSecurity();
  const button=$('panelCheckReleases');button.disabled=true;
  await loadPanelChannel();
- txt('panelUpdateState','Prüfe offizielle GitHub-Releases …');
+ txt('panelUpdateState',tr('Prüfe offizielle GitHub-Releases …'));
  $('panelReleaseLink').hidden=true;
  try{
   const d=await api('panel-release');
@@ -609,19 +673,19 @@ async function loadPanelRelease(){
   txt('panelInstalledVersion',d.installed);
   txt('panelLatestVersion',d.latest);
   renderReleaseMarkdown(d.notes);
-  txt('panelReleaseSignatureState',d.signature_assets_present?'Signaturdateien vorhanden – noch nicht verifiziert':'Release nicht signiert');
-  txt('panelAutoInstallState',d.installation_enabled?'Bereit':'Gesperrt (kein signiertes neueres Release)');
+  txt('panelReleaseSignatureState',d.signature_assets_present?tr('Signaturdateien vorhanden – noch nicht verifiziert'):tr('Release nicht signiert'));
+  txt('panelAutoInstallState',d.installation_enabled?'Bereit':tr('Gesperrt (kein signiertes neueres Release)'));
   txt('panelSignatureState', d.signature_assets_present
-   ? (d.trusted_key_configured ? 'Signierte Release-Dateien gefunden; öffentlicher Prüfschlüssel ist eingerichtet. Eine lokale Verifikation vor Installation bleibt erforderlich.' : 'Signierte Release-Dateien gefunden, aber noch kein vertrauenswürdiger Prüfschlüssel eingerichtet.')
-   : 'Dieses Release ist noch nicht digital signiert. Automatische Installation bleibt gesperrt.');
+   ? (d.trusted_key_configured ? tr('Signierte Release-Dateien gefunden; öffentlicher Prüfschlüssel ist eingerichtet. Eine lokale Verifikation vor Installation bleibt erforderlich.') : tr('Signierte Release-Dateien gefunden, aber noch kein vertrauenswürdiger Prüfschlüssel eingerichtet.'))
+   : tr('Dieses Release ist noch nicht digital signiert. Automatische Installation bleibt gesperrt.'));
   txt('panelUpdateState',d.update_available
-   ? (d.installation_enabled?'Signiertes neues Panel-Release ist verfügbar. Update per Klick möglich.':'Neue Version verfügbar, aber Signaturdateien oder vertrauenswürdiger Schlüssel fehlen.')
-   : 'Keine neuere Panel-Version im ausgewählten Kanal verfügbar.');
+   ? (d.installation_enabled?tr('Signiertes neues Panel-Release ist verfügbar. Update per Klick möglich.'):tr('Neue Version verfügbar, aber Signaturdateien oder vertrauenswürdiger Schlüssel fehlen.'))
+   : tr('Keine neuere Panel-Version im ausgewählten Kanal verfügbar.'));
   const a=$('panelReleaseLink');
   if(/^https:\/\/github\.com\/xDraconix\/DracoRock-Control\/releases\/tag\/v\d+\.\d+\.\d+$/.test(d.release_url||'')){
    a.href=d.release_url;a.hidden=false;
   }
- }catch(e){$('panelStartUpdate').disabled=true;txt('panelUpdateState','Versionsprüfung fehlgeschlagen: '+e.message);renderReleaseMarkdown('–');txt('panelSignatureState','Signaturstatus nicht verfügbar.');txt('panelReleaseSignatureState','Nicht ermittelt');txt('panelAutoInstallState','Prüfe Verfügbarkeit …')}
+ }catch(e){$('panelStartUpdate').disabled=true;txt('panelUpdateState',tr('Versionsprüfung fehlgeschlagen: ')+e.message);renderReleaseMarkdown('–');txt('panelSignatureState',tr('Signaturstatus nicht verfügbar.'));txt('panelReleaseSignatureState',tr('Nicht ermittelt'));txt('panelAutoInstallState',tr('Prüfe Verfügbarkeit …'))}
  finally{button.disabled=false}
 }
 let panelUpdatePoll=null;
@@ -635,31 +699,31 @@ async function pollPanelUpdate(){
   $('panelStartUpdate').disabled=true;
   panelUpdatePollCount++;
   if(!active && panelUpdatePollCount>=3){if(panelUpdatePoll){clearInterval(panelUpdatePoll);panelUpdatePoll=null;}await loadPanelRelease();}
- }catch(e){txt('panelUpdateState','Update-Protokoll nicht erreichbar: '+e.message);}
+ }catch(e){txt('panelUpdateState',tr('Update-Protokoll nicht erreichbar: ')+e.message);}
 }
 $('panelStartUpdate').addEventListener('click',async()=>{
- if(!confirm('Signiertes GitHub-Release aus dem Kanal '+(panelSelectedChannel==='test'?'TESTVERSIONEN':'STABIL')+' installieren? Apache wird neu gestartet; Minecraft soll weiterlaufen.'))return;
+ if(!confirm(tr('Signiertes GitHub-Release aus dem Kanal ')+(panelSelectedChannel==='test'?tr('TESTVERSIONEN'):tr('STABIL'))+tr(' installieren? Apache wird neu gestartet; Minecraft soll weiterlaufen.')))return;
  $('panelStartUpdate').disabled=true;
  try{await api('panel-update-start',{method:'POST',headers:{'X-CSRF-Token':csrf}});
-   txt('panelUpdateState','Panel-Updateauftrag gestartet. Protokoll wird geladen …');
+   txt('panelUpdateState',tr('Panel-Updateauftrag gestartet. Protokoll wird geladen …'));
    if(panelUpdatePoll)clearInterval(panelUpdatePoll);
    panelUpdatePollCount=0;
    panelUpdatePoll=setInterval(pollPanelUpdate,2500);await sleep(1500);await pollPanelUpdate();
- }catch(e){showNotice('Panel-Update: '+e.message,true);await loadPanelRelease();}
+ }catch(e){showNotice(tr('Panel-Update: ')+e.message,true);await loadPanelRelease();}
 });
 $('panelShowUpdateLog').addEventListener('click',pollPanelUpdate);
 $('panelCheckReleases').addEventListener('click',loadPanelRelease);
-$('loginForm').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api('login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});csrf=d.csrf;$('password').value='';txt('loginError','');showApp()}catch(e){txt('loginError',e.message)}});document.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>action(b.dataset.action)));document.querySelectorAll('[data-tab]').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.remove('selected'));a.classList.add('selected');document.querySelectorAll('.tab').forEach(x=>x.hidden=x.id!==a.dataset.tab);txt('pageTitle',({overview:'Serverübersicht',update:'Minecraft-Updates','panel-update':'Panel-Updates',worlds:'Welten-Manager',addons:'Add-on Manager',settings:'Server-Einstellungen',console:'Live-Konsole',monitor:'Live-Servermonitoring',players:'Spielerverwaltung',backups:'Backup-Verwaltung',logs:'Systemprotokolle'})[a.dataset.tab]);if(a.dataset.tab==='panel-update')loadPanelRelease();if(a.dataset.tab==='logs')logs();if(a.dataset.tab==='backups')backups();if(a.dataset.tab==='addons')loadAddons();if(a.dataset.tab==='settings')loadProperties();if(a.dataset.tab==='worlds')loadWorlds();if(a.dataset.tab==='console')loadConsole();if(a.dataset.tab==='overview')loadDashboardAlerts();if(a.dataset.tab==='monitor')loadMonitoring();if(a.dataset.tab==='players'){status();loadPlayers();loadOnlinePlayers()}}));$('refresh').addEventListener('click',()=>{refreshAll();loadBedrockUpdate(true)});$('reloadLogs').addEventListener('click',logs);$('logType').addEventListener('change',()=>{$('jobHistory').value='';logs()});$('jobHistory').addEventListener('change',()=>{$('logType').value=$('jobHistory').selectedOptions[0].dataset.type||'update';logs()});$('updateLogButton').addEventListener('click',()=>{document.querySelector('[data-tab="logs"]').click();$('logType').value='update';logs()});$('logout').addEventListener('click',async()=>{try{await api('logout',{method:'POST',headers:{'X-CSRF-Token':csrf}})}finally{location.reload()}});api('session').then(d=>{if(d.authenticated){csrf=d.csrf;showApp()}}).catch(()=>{});setInterval(()=>{if(!$('app').hidden)status()},15000);
+$('loginForm').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api('login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});csrf=d.csrf;$('password').value='';txt('loginError','');showApp()}catch(e){txt('loginError',e.message)}});document.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>action(b.dataset.action)));document.querySelectorAll('[data-tab]').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.remove('selected'));a.classList.add('selected');document.querySelectorAll('.tab').forEach(x=>x.hidden=x.id!==a.dataset.tab);txt('pageTitle',({overview:tr('Serverübersicht'),update:tr('Minecraft-Updates'),'panel-update':tr('Panel-Updates'),worlds:tr('Welten-Manager'),addons:'Add-on Manager',settings:tr('Server-Einstellungen'),console:tr('Live-Konsole'),monitor:tr('Live-Servermonitoring'),players:tr('Spielerverwaltung'),backups:tr('Backup-Verwaltung'),logs:tr('Systemprotokolle')})[a.dataset.tab]);if(a.dataset.tab==='panel-update')loadPanelRelease();if(a.dataset.tab==='logs')logs();if(a.dataset.tab==='backups')backups();if(a.dataset.tab==='addons')loadAddons();if(a.dataset.tab==='settings')loadProperties();if(a.dataset.tab==='worlds')loadWorlds();if(a.dataset.tab==='console')loadConsole();if(a.dataset.tab==='overview')loadDashboardAlerts();if(a.dataset.tab==='monitor')loadMonitoring();if(a.dataset.tab==='players'){status();loadPlayers();loadOnlinePlayers()}}));$('refresh').addEventListener('click',()=>{refreshAll();loadBedrockUpdate(true)});$('reloadLogs').addEventListener('click',logs);$('logType').addEventListener('change',()=>{$('jobHistory').value='';logs()});$('jobHistory').addEventListener('change',()=>{$('logType').value=$('jobHistory').selectedOptions[0].dataset.type||'update';logs()});$('updateLogButton').addEventListener('click',()=>{document.querySelector('[data-tab="logs"]').click();$('logType').value='update';logs()});$('logout').addEventListener('click',async()=>{try{await api('logout',{method:'POST',headers:{'X-CSRF-Token':csrf}})}finally{location.reload()}});api('session').then(d=>{if(d.authenticated){csrf=d.csrf;showApp()}}).catch(()=>{});setInterval(()=>{if(!$('app').hidden)status()},15000);
 
 let addonPacks=[];
-async function loadAddons(){const el=$('addonList');el.textContent='Lade Pakete ...';try{const d=await api('addons');addonPacks=d.packs||[];renderAddons()}catch(e){el.textContent='Fehler: '+e.message}}
+async function loadAddons(){const el=$('addonList');el.textContent=tr('Lade Pakete ...');try{const d=await api('addons');addonPacks=d.packs||[];renderAddons()}catch(e){el.textContent='Fehler: '+e.message}}
 function renderAddons(){
  const el=$('addonList');el.replaceChildren();
  const filter=$('addonFilter').value,kind=$('addonKind').value,q=$('addonSearch').value.trim().toLocaleLowerCase('de');
  const active=addonPacks.filter(p=>p.active).length,system=addonPacks.filter(p=>p.category==='system').length;
  txt('addonSummary',`${active} aktiv · ${addonPacks.length-active} weitere Pakete · ${system} als Standardpakete erkannt · ${addonPacks.filter(p=>p.duplicate).length} Einträge mit mehrfacher UUID`);
  const visible=addonPacks.filter(p=>(filter==='all'||(filter==='active'?p.active:filter==='other'?!p.active&&p.category!=='system':p.category==='system'))&&(kind==='all'||p.kind===kind)&&(!q||[p.name,p.description,p.uuid,p.folder,p.version.join('.')].join(' ').toLocaleLowerCase('de').includes(q)));
- if(!visible.length){const empty=document.createElement('p');empty.className='muted';empty.textContent='Keine passenden Pakete gefunden.';el.append(empty);return}
+ if(!visible.length){const empty=document.createElement('p');empty.className='muted';empty.textContent=tr('Keine passenden Pakete gefunden.');el.append(empty);return}
  for(const p of visible){
   const row=document.createElement('div');row.className='addon-row';
   const info=document.createElement('div');info.className='addon-info';
@@ -668,10 +732,10 @@ function renderAddons(){
   const path=document.createElement('div');path.className='muted tiny';path.textContent='Ordner: '+p.folder+' · UUID: '+p.uuid;
   info.append(name,details,path);
   if(p.description&&p.description!==p.name){const desc=document.createElement('div');desc.className='muted tiny';desc.textContent=p.description;info.append(desc)}
-  if(p.duplicate){const warn=document.createElement('div');warn.className='addon-warning';warn.textContent='⚠ Mehrere installierte Versionen mit dieser UUID – Aktivierung gesperrt';info.append(warn)}
-  if(p.category==='system'){const sys=document.createElement('div');sys.className='muted tiny';sys.textContent='Als Standardpaket eingeordnet (anhand des Ordnernamens)';info.append(sys)}
+  if(p.duplicate){const warn=document.createElement('div');warn.className='addon-warning';warn.textContent=tr('⚠ Mehrere installierte Versionen mit dieser UUID – Aktivierung gesperrt');info.append(warn)}
+  if(p.category==='system'){const sys=document.createElement('div');sys.className='muted tiny';sys.textContent=tr('Als Standardpaket eingeordnet (anhand des Ordnernamens)');info.append(sys)}
   const btn=document.createElement('button');btn.className=p.active?'danger':'positive';btn.textContent=p.active?'Deaktivieren':'Aktivieren';btn.disabled=!!p.duplicate;
-  btn.addEventListener('click',async()=>{if(!confirm((p.active?'Deaktivieren':'Aktivieren')+'? Minecraft muss gestoppt sein.'))return;try{const r=await api('addon-action',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({action:p.active?'disable':'enable',kind:p.kind,uuid:p.uuid})});showNotice(r.message||'Gespeichert');loadAddons()}catch(e){showNotice(e.message,true)}});
+  btn.addEventListener('click',async()=>{if(!confirm((p.active?'Deaktivieren':'Aktivieren')+tr('? Minecraft muss gestoppt sein.')))return;try{const r=await api('addon-action',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({action:p.active?'disable':'enable',kind:p.kind,uuid:p.uuid})});showNotice(r.message||'Gespeichert');loadAddons()}catch(e){showNotice(e.message,true)}});
   row.append(info,btn);el.append(row)
  }
 }
@@ -679,7 +743,7 @@ $('addonSearch').addEventListener('input',renderAddons);
 $('addonFilter').addEventListener('change',renderAddons);
 $('addonKind').addEventListener('change',renderAddons);
 $('reloadAddons').addEventListener('click',loadAddons);
-$('addonUploadForm').addEventListener('submit',async e=>{e.preventDefault();const file=$('addonFile').files[0];if(!file)return;if(file.size>268435456){showNotice('Maximal 256 MB',true);return}if(!confirm('Add-on installieren? Der Minecraft-Dienst muss gestoppt sein.'))return;const data=new FormData();data.append('addon',file);try{const r=await api('addon-upload',{method:'POST',headers:{'X-CSRF-Token':csrf},body:data});showNotice(r.message||'Installiert');$('addonUploadForm').reset();loadAddons()}catch(e){showNotice(e.message,true)}});
+$('addonUploadForm').addEventListener('submit',async e=>{e.preventDefault();const file=$('addonFile').files[0];if(!file)return;if(file.size>268435456){showNotice('Maximal 256 MB',true);return}if(!confirm(tr('Add-on installieren? Der Minecraft-Dienst muss gestoppt sein.')))return;const data=new FormData();data.append('addon',file);try{const r=await api('addon-upload',{method:'POST',headers:{'X-CSRF-Token':csrf},body:data});showNotice(r.message||'Installiert');$('addonUploadForm').reset();loadAddons()}catch(e){showNotice(e.message,true)}});
 
 let consoleBusy=false;
 const consoleLevelPattern=/^\[(?:(?:\d{4}-\d{2}-\d{2}) [\d:.]+ )?(FATAL|ERROR|WARN(?:ING)?|INFO|DEBUG|TRACE)\]/i;
@@ -724,12 +788,12 @@ async function loadConsole(){
  consoleBusy=true;
  try{
   const data=await api('console-tail');
-  renderConsole(data.logs||'Keine Konsolenausgabe verfügbar.',data.columns);
+  renderConsole(data.logs||tr('Keine Konsolenausgabe verfügbar.'),data.columns);
  }catch(e){
-  txt('consoleOutput','Konsole nicht verfügbar: '+e.message);
+  txt('consoleOutput',tr('Konsole nicht verfügbar: ')+e.message);
  }finally{consoleBusy=false}
 }
-async function consoleSend(command,value=''){try{const d=await api('console-send',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({command,value})});showNotice(d.message||'Befehl gesendet');setTimeout(loadConsole,600)}catch(e){showNotice(e.message,true)}}
+async function consoleSend(command,value=''){try{const d=await api('console-send',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({command,value})});showNotice(d.message||tr('Befehl gesendet'));setTimeout(loadConsole,600)}catch(e){showNotice(e.message,true)}}
 $('consoleCommandForm').addEventListener('submit',async event=>{
  event.preventDefault();
  const input=$('consoleCommand');
@@ -747,7 +811,7 @@ function inlinePlayerActions(name,entry){
   btn.className='player-action '+classes;
   btn.textContent=label;
   btn.title=title+' – '+name;
-  btn.setAttribute('aria-label',title+' für '+name);
+  btn.setAttribute('aria-label',title+tr(' für ')+name);
   if(pressed!==null)btn.setAttribute('aria-pressed',String(pressed));
   btn.addEventListener('click',()=>playerCommand(command,name));
   buttons.append(btn);
@@ -756,7 +820,7 @@ function inlinePlayerActions(name,entry){
  const isAllowed=!!entry && entry.allowlisted!==false;
  addButton(isAllowed?'allowlist-remove':'allowlist-add',
            isAllowed?'✓ Allow':'Allow',
-           isAllowed?'Von der Allowlist entfernen':'Zur Allowlist hinzufügen',
+           isAllowed?tr('Von der Allowlist entfernen'):tr('Zur Allowlist hinzufügen'),
            'player-action-allow'+(isAllowed?' player-action-selected':''),
            isAllowed);
  // OP status is only known when the allowlist entry has a matching XUID
@@ -764,13 +828,13 @@ function inlinePlayerActions(name,entry){
  if(entry?.permission_known){
   const isOp=entry.permission==='operator';
   addButton(isOp?'deop':'op',isOp?'✓ OP':'OP',
-            isOp?'Operatorrechte entziehen':'Operatorrechte erteilen',
+            isOp?tr('Operatorrechte entziehen'):tr('Operatorrechte erteilen'),
             'player-action-op'+(isOp?' player-action-selected':''),
             isOp);
  }else{
-  addButton('op','OP','Operatorrechte erteilen (aktueller Status unbekannt)',
+  addButton('op','OP',tr('Operatorrechte erteilen (aktueller Status unbekannt)'),
             'player-action-op',null);
-  addButton('deop','deOP','Operatorrechte entziehen (aktueller Status unbekannt)',
+  addButton('deop','deOP',tr('Operatorrechte entziehen (aktueller Status unbekannt)'),
             'player-action-deop',null);
  }
  return buttons;
@@ -788,18 +852,18 @@ function playerBadges(entry,isOnline){
  };
  if(isOnline)badge('● Online','player-badge-online');
  if(entry){
-  if(entry.allowlisted===false)badge('Nicht auf Allowlist','player-badge-not-allowed');
+  if(entry.allowlisted===false)badge(tr('Nicht auf Allowlist'),'player-badge-not-allowed');
   else badge('✓ Allowlist','player-badge-allowed');
   if(entry.permission_known){
    const role=entry.permission;
    badge(role==='operator'?'★ OP':role==='visitor'?'Besucher':'Mitglied',
          role==='operator'?'player-badge-operator':'player-badge-member');
   }else{
-   badge('Rechte unbekannt','player-badge-unknown');
+   badge(tr('Rechte unbekannt'),'player-badge-unknown');
   }
  }else if(isOnline){
-  badge('Nicht auf Allowlist','player-badge-not-allowed');
-  badge('Rechte ohne Allowlist-XUID nicht zuordenbar','player-badge-unknown');
+  badge(tr('Nicht auf Allowlist'),'player-badge-not-allowed');
+  badge(tr('Rechte ohne Allowlist-XUID nicht zuordenbar'),'player-badge-unknown');
  }
  return badges;
 }
@@ -807,15 +871,15 @@ function playerBadges(entry,isOnline){
 function renderOnlinePlayers(players){
  const list=$('onlinePlayersList');list.replaceChildren();
  if(!players.length){
-  const p=document.createElement('p');p.className='muted';p.textContent='Derzeit keine Spieler online.';list.append(p);
+  const p=document.createElement('p');p.className='muted';p.textContent=tr('Derzeit keine Spieler online.');list.append(p);
   return;
  }
  for(const player of players){
   const row=document.createElement('div');row.className='player-entry player-entry-online';
   const info=document.createElement('div');info.className='player-entry-info';
   const name=document.createElement('strong');name.className='player-name';name.textContent=player;
-  info.append(name,playerBadges(knownPlayerRoles.get(player.toLocaleLowerCase('de-DE')),true));
-  row.append(info,inlinePlayerActions(player,knownPlayerRoles.get(player.toLocaleLowerCase('de-DE'))));list.append(row);
+  info.append(name,playerBadges(knownPlayerRoles.get(player.toLocaleLowerCase((globalThis.dracoI18n?.locale||'de-DE'))),true));
+  row.append(info,inlinePlayerActions(player,knownPlayerRoles.get(player.toLocaleLowerCase((globalThis.dracoI18n?.locale||'de-DE')))));list.append(row);
  }
 }
 
@@ -823,38 +887,38 @@ async function loadOnlinePlayers(){
  if(onlinePlayersBusy)return;
  onlinePlayersBusy=true;
  const state=$('onlinePlayersState'),list=$('onlinePlayersList');
- state.textContent='Aktuelle Spieler werden über Minecraft abgefragt ...';
+ state.textContent=tr('Aktuelle Spieler werden über Minecraft abgefragt ...');
  try{
   const d=await api('players-online');
-  if(!Array.isArray(d.players)||!Number.isInteger(d.count)||d.count!==d.players.length)throw Error('Unvollständige Serverantwort');
-  if(d.players.some(n=>typeof n!=='string'))throw Error('Ungültige Spielernamen');
+  if(!Array.isArray(d.players)||!Number.isInteger(d.count)||d.count!==d.players.length)throw Error(tr('Unvollständige Serverantwort'));
+  if(d.players.some(n=>typeof n!=='string'))throw Error(tr('Ungültige Spielernamen'));
   const changed=lastOnlineRoster===null || d.players.length!==lastOnlineRoster.length ||
    d.players.some((name,i)=>name!==lastOnlineRoster[i]);
   lastOnlineRoster=d.players.slice();
-  state.textContent=d.count+' von '+d.max_players+' Spielern online · frisch über die Konsole abgefragt';
+  state.textContent=d.count+tr(' von ')+d.max_players+tr(' Spielern online · frisch über die Konsole abgefragt');
   renderOnlinePlayers(lastOnlineRoster);
   if(changed)loadPlayers();
  }catch(e){
   lastOnlineRoster=null;
   list.replaceChildren();
-  state.textContent='Spielernamen nicht verfügbar: '+e.message+' (keine veralteten Namen angezeigt)';
+  state.textContent=tr('Spielernamen nicht verfügbar: ')+e.message+tr(' (keine veralteten Namen angezeigt)');
  }finally{onlinePlayersBusy=false}
 }
 
 async function loadPlayers(){
- const list=$('managedPlayers');list.textContent='Lade Allowlist ...';
+ const list=$('managedPlayers');list.textContent=tr('Lade Allowlist ...');
  try{
   const d=await api('players-state');
-  txt('allowlistState',d.allowlist_enabled===true?'● Allowlist aktiv – nur eingetragene Gamertags können beitreten':d.allowlist_enabled===false?'● Allowlist deaktiviert – aktuell keine Zugangsbeschränkung':'⚠ Allowlist-Einstellung unbekannt');
+  txt('allowlistState',d.allowlist_enabled===true?tr('● Allowlist aktiv – nur eingetragene Gamertags können beitreten'):d.allowlist_enabled===false?tr('● Allowlist deaktiviert – aktuell keine Zugangsbeschränkung'):tr('⚠ Allowlist-Einstellung unbekannt'));
   $('allowlistState').className='player-allowlist-state '+(d.allowlist_enabled===true?'player-allowlist-enabled':'player-allowlist-disabled');
-  txt('playersWarning',(Array.isArray(d.warnings)&&d.warnings.length?d.warnings.join(' · '):'')+' Online-Spieler werden separat automatisch abgefragt.');
+  txt('playersWarning',(Array.isArray(d.warnings)&&d.warnings.length?d.warnings.join(' · '):'')+tr(' Online-Spieler werden separat automatisch abgefragt.'));
   list.replaceChildren();
-  if(!Array.isArray(d.players))throw Error('Ungültige Allowlist-Antwort');
+  if(!Array.isArray(d.players))throw Error(tr('Ungültige Allowlist-Antwort'));
   const known=(Array.isArray(d.identified_players)?d.identified_players:[])
    .concat(d.players);
-  knownPlayerRoles=new Map(known.map(player=>[player.name.toLocaleLowerCase('de-DE'),player]));
+  knownPlayerRoles=new Map(known.map(player=>[player.name.toLocaleLowerCase((globalThis.dracoI18n?.locale||'de-DE')),player]));
   if(lastOnlineRoster!==null)renderOnlinePlayers(lastOnlineRoster);
-  if(!d.players.length){const p=document.createElement('p');p.className='muted';p.textContent='Keine Allowlist-Einträge vorhanden.';list.append(p);return}
+  if(!d.players.length){const p=document.createElement('p');p.className='muted';p.textContent=tr('Keine Allowlist-Einträge vorhanden.');list.append(p);return}
   for(const player of d.players){
    const row=document.createElement('div');row.className='player-entry player-entry-allowlist';
    const info=document.createElement('div');info.className='player-entry-info';
@@ -862,15 +926,15 @@ async function loadPlayers(){
    info.append(name,playerBadges(player,false));
    row.append(info,inlinePlayerActions(player.name,player));list.append(row);
   }
- }catch(e){knownPlayerRoles=new Map();if(lastOnlineRoster!==null)renderOnlinePlayers(lastOnlineRoster);list.textContent='Spielerverwaltung nicht verfügbar: '+e.message;showNotice(e.message,true)}
+ }catch(e){knownPlayerRoles=new Map();if(lastOnlineRoster!==null)renderOnlinePlayers(lastOnlineRoster);list.textContent=tr('Spielerverwaltung nicht verfügbar: ')+e.message;showNotice(e.message,true)}
 }
 async function playerCommand(command,name){
- const labels={'kick':'Spieler kicken','allowlist-add':'Zur Allowlist hinzufügen','allowlist-remove':'Von Allowlist entfernen','op':'Operatorrechte erteilen','deop':'Operatorrechte entziehen'};
+ const labels={'kick':tr('Spieler kicken'),'allowlist-add':tr('Zur Allowlist hinzufügen'),'allowlist-remove':tr('Von Allowlist entfernen'),'op':tr('Operatorrechte erteilen'),'deop':tr('Operatorrechte entziehen')};
  if(!Object.hasOwn(labels,command)||!name)return;
- if(!confirm(labels[command]+' für '+name+'?'+(command==='op'?' Operatoren dürfen die Welt und Servereinstellungen verändern.':'')))return;
+ if(!confirm(labels[command]+tr(' für ')+name+'?'+(command==='op'?tr(' Operatoren dürfen die Welt und Servereinstellungen verändern.'):'')))return;
  try{
   const d=await api('console-send',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({command,value:name})});
-  showNotice(d.message||'Befehl an die Serverkonsole gesendet. Ausführung dort prüfen.');
+  showNotice(d.message||tr('Befehl an die Serverkonsole gesendet. Ausführung dort prüfen.'));
   setTimeout(()=>{loadPlayers();loadOnlinePlayers()},1200);
  }catch(e){showNotice(e.message,true)}
 }
@@ -883,16 +947,16 @@ setInterval(()=>{if(!$('app').hidden&&!$('console').hidden)loadConsole()},5000);
 setInterval(()=>{if(!$('app').hidden&&!$('players').hidden)loadOnlinePlayers()},15000);
 
 async function loadWorlds(){
- const el=$('worldList');el.textContent='Lade Welten ...';
+ const el=$('worldList');el.textContent=tr('Lade Welten ...');
  try{
   const d=await api('worlds');el.replaceChildren();
-  txt('worldSummary','In server.properties ausgewählt: '+d.selected+' · Server '+(d.running?'online':'offline'));
-  if(!d.worlds.length){el.textContent='Keine vollständigen Welten gefunden (level.dat fehlt).';return}
+  txt('worldSummary',tr('In server.properties ausgewählt: ')+d.selected+' · Server '+(d.running?'online':'offline'));
+  if(!d.worlds.length){el.textContent=tr('Keine vollständigen Welten gefunden (level.dat fehlt).');return}
   for(const w of d.worlds){
    const row=document.createElement('div');row.className='addon-row';
    const info=document.createElement('div');info.className='addon-info';
    const name=document.createElement('b');name.textContent=w.name;
-   const sub=document.createElement('div');sub.className='muted tiny';sub.textContent=w.selected?'In server.properties ausgewählt':'Vorhandene Welt';
+   const sub=document.createElement('div');sub.className='muted tiny';sub.textContent=w.selected?tr('In server.properties ausgewählt'):tr('Vorhandene Welt');
    info.append(name,sub);
    const meta=document.createElement('div');meta.className='muted tiny';
    const details=[];
@@ -903,11 +967,11 @@ async function loadWorlds(){
    if(details.length)info.append(meta);
    const seedBox=document.createElement('div');seedBox.className='world-seed-row';
    const seedLabel=document.createElement('span');seedLabel.className='muted tiny';seedLabel.textContent='Weltseed:';
-   const seedValue=document.createElement('code');seedValue.textContent=(typeof w.seed==='string'&&/^-?\d{1,20}$/.test(w.seed))?w.seed:'Nicht verfügbar';
+   const seedValue=document.createElement('code');seedValue.textContent=(typeof w.seed==='string'&&/^-?\d{1,20}$/.test(w.seed))?w.seed:tr('Nicht verfügbar');
    seedBox.append(seedLabel,seedValue);
    if(typeof w.seed==='string'&&/^-?\d{1,20}$/.test(w.seed)){
-    const seedCopy=document.createElement('button');seedCopy.className='secondary';seedCopy.textContent='Kopieren';
-    seedCopy.title='Weltseed in Zwischenablage kopieren';
+    const seedCopy=document.createElement('button');seedCopy.className='secondary';seedCopy.textContent=tr('Kopieren');
+    seedCopy.title=tr('Weltseed in Zwischenablage kopieren');
     seedCopy.addEventListener('click',()=>{
      // The dashboard commonly runs on http://SERVER-IP:8088, where the
      // asynchronous Clipboard API is unavailable outside secure contexts.
@@ -936,25 +1000,25 @@ async function loadWorlds(){
       }
       return copied;
      }
-     if(copyLegacy(w.seed)){showNotice('Weltseed in Zwischenablage kopiert.');return}
+     if(copyLegacy(w.seed)){showNotice(tr('Weltseed in Zwischenablage kopiert.'));return}
      if(window.isSecureContext&&navigator.clipboard?.writeText){
       navigator.clipboard.writeText(w.seed)
-       .then(()=>showNotice('Weltseed in Zwischenablage kopiert.'))
-       .catch(()=>showNotice('Kopieren nicht möglich. Bitte den sichtbaren Seed markieren und Strg+C drücken.',true));
+       .then(()=>showNotice(tr('Weltseed in Zwischenablage kopiert.')))
+       .catch(()=>showNotice(tr('Kopieren nicht möglich. Bitte den sichtbaren Seed markieren und Strg+C drücken.'),true));
       return;
      }
-     showNotice('Automatisches Kopieren wird von diesem Browser nicht unterstützt. Bitte den sichtbaren Seed markieren und Strg+C drücken.',true);
+     showNotice(tr('Automatisches Kopieren wird von diesem Browser nicht unterstützt. Bitte den sichtbaren Seed markieren und Strg+C drücken.'),true);
     });
     seedBox.append(seedCopy);
    }
    info.append(seedBox);
-   const btn=document.createElement('button');btn.className=w.selected?'secondary':'positive';btn.textContent=w.selected?'Ausgewählt':'Welt auswählen';btn.disabled=!!w.selected;
+   const btn=document.createElement('button');btn.className=w.selected?'secondary':'positive';btn.textContent=w.selected?tr('Ausgewählt'):tr('Welt auswählen');btn.disabled=!!w.selected;
    btn.addEventListener('click',()=>worldAction('select',w.name));
-   const copy=document.createElement('button');copy.className='secondary';copy.textContent='Duplizieren';copy.addEventListener('click',()=>{const n=prompt('Name für Kopie von '+w.name+':',w.name+' Kopie');if(n)worldDuplicate(w.name,n.trim())});
-   const save=document.createElement('button');save.className='secondary';save.textContent='Sichern';save.addEventListener('click',()=>worldAction('backup',w.name));
+   const copy=document.createElement('button');copy.className='secondary';copy.textContent=tr('Duplizieren');copy.addEventListener('click',()=>{const n=prompt(tr('Name für Kopie von ')+w.name+':',w.name+tr(' Kopie'));if(n)worldDuplicate(w.name,n.trim())});
+   const save=document.createElement('button');save.className='secondary';save.textContent=tr('Sichern');save.addEventListener('click',()=>worldAction('backup',w.name));
    for(const format of ['zip','mcworld']){
     const download=document.createElement('button');download.className='secondary';download.textContent='↓ '+(format==='zip'?'ZIP':'.mcworld');
-    download.title='Minecraft muss für den Export gestoppt sein';
+    download.title=tr('Minecraft muss für den Export gestoppt sein');
     download.addEventListener('click',()=>worldExport(w.name,format));
     row.append(download);
    }
@@ -963,28 +1027,28 @@ async function loadWorlds(){
  }catch(e){el.textContent='Fehler: '+e.message}
 }
 async function worldExport(name,format){
- if(!confirm('Welt "'+name+'" als '+format+' exportieren? Minecraft muss gestoppt sein.'))return;
+ if(!confirm('Welt "'+name+tr('" als ')+format+tr(' exportieren? Minecraft muss gestoppt sein.')))return;
  try{
-  showNotice('Weltarchiv wird vorbereitet …',false,true);
+  showNotice(tr('Weltarchiv wird vorbereitet …'),false,true);
   const d=await api('world-export',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({name,format})});
   const id=d.job_id;
-  if(!/^[a-f0-9]{32}$/.test(id||''))throw Error('Keine gültige Auftrags-ID erhalten');
+  if(!/^[a-f0-9]{32}$/.test(id||''))throw Error(tr('Keine gültige Auftrags-ID erhalten'));
   for(let n=0;n<900;n++){
    await sleep(2000);
    const state=await api('job-status&id='+encodeURIComponent(id));
    if(state.state==='success'){
-    showNotice('Weltarchiv bereit. Download startet …');
+    showNotice(tr('Weltarchiv bereit. Download startet …'));
     const a=document.createElement('a');a.href='?api=world-download&id='+encodeURIComponent(id)+'&format='+encodeURIComponent(format);
     document.body.append(a);a.click();a.remove();return;
    }
-   if(state.state==='failed')throw Error(state.message||'Export fehlgeschlagen');
-   showNotice(state.message||'Weltarchiv wird erstellt …',false,true);
+   if(state.state==='failed')throw Error(state.message||tr('Export fehlgeschlagen'));
+   showNotice(state.message||tr('Weltarchiv wird erstellt …'),false,true);
   }
-  throw Error('Export dauert zu lange. Bitte Protokoll prüfen.');
+  throw Error(tr('Export dauert zu lange. Bitte Protokoll prüfen.'));
  }catch(e){showNotice(e.message,true)}
 }
 async function worldAction(action,name){
- const question=action==='backup'?'Welt "'+name+'" sichern? Der Server muss gestoppt sein.':action==='create'?'Neue Welt "'+name+'" für den nächsten Start vorbereiten?':'Welt "'+name+'" auswählen? Der Server wird NICHT automatisch neu gestartet.';
+ const question=action==='backup'?'Welt "'+name+tr('" sichern? Der Server muss gestoppt sein.'):action==='create'?tr('Neue Welt "')+name+tr('" für den nächsten Start vorbereiten?'):'Welt "'+name+tr('" auswählen? Der Server wird NICHT automatisch neu gestartet.');
  if(!confirm(question))return;
  try{const r=await api('world-action',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({action,name})});showNotice(r.message||'Gespeichert');loadWorlds();if(action==='create')$('worldCreateForm').reset()}catch(e){showNotice(e.message,true)}
 }
@@ -992,20 +1056,20 @@ $('reloadWorlds').addEventListener('click',loadWorlds);
 $('worldCreateForm').addEventListener('submit',e=>{e.preventDefault();const name=$('worldNewName').value.trim();if(name)worldAction('create',name)});
 
 async function worldDuplicate(source,name){
- if(!confirm('Welt "'+source+'" nach "'+name+'" duplizieren? Minecraft muss gestoppt sein.'))return;
+ if(!confirm('Welt "'+source+tr('" nach "')+name+tr('" duplizieren? Minecraft muss gestoppt sein.')))return;
  try{const d=await api('world-duplicate',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({source,name})});showNotice(d.message||'Dupliziert');loadWorlds()}catch(e){showNotice(e.message,true)}
 }
 $('worldImportForm').addEventListener('submit',async e=>{
- e.preventDefault();if(!confirm('Welt importieren? Minecraft muss gestoppt sein.'))return;
+ e.preventDefault();if(!confirm(tr('Welt importieren? Minecraft muss gestoppt sein.')))return;
  const f=new FormData();f.append('name',$('worldImportName').value.trim());f.append('world',$('worldImportFile').files[0]);
  try{const d=await api('world-import',{method:'POST',headers:{'X-CSRF-Token':csrf},body:f});showNotice(d.message||'Importiert');$('worldImportForm').reset();loadWorlds()}catch(err){showNotice(err.message,true)}
 });
 
 // Version 2.3: safe property editor (existing keys only).
 let propertiesOriginal={},propertiesRevision='';
-const propertyNames={'server-name':'Servername','level-name':'Weltname','gamemode':'Spielmodus','difficulty':'Schwierigkeit','max-players':'Maximale Spieler','server-port':'Server-Port (IPv4)','server-portv6':'Server-Port (IPv6)','online-mode':'Online-Modus','allow-cheats':'Cheats erlauben','enable-lan-visibility':'LAN-Sichtbarkeit','view-distance':'Sichtweite','tick-distance':'Simulationsdistanz','default-player-permission-level':'Standard-Spielerrechte','player-idle-timeout':'AFK-Timeout'};
+const propertyNames={'server-name':tr('Servername'),'level-name':tr('Weltname'),'gamemode':tr('Spielmodus'),'difficulty':tr('Schwierigkeit'),'max-players':tr('Maximale Spieler'),'server-port':tr('Server-Port (IPv4)'),'server-portv6':tr('Server-Port (IPv6)'),'online-mode':tr('Online-Modus'),'allow-cheats':tr('Cheats erlauben'),'enable-lan-visibility':'LAN-Sichtbarkeit','view-distance':'Sichtweite','tick-distance':'Simulationsdistanz','default-player-permission-level':tr('Standard-Spielerrechte'),'player-idle-timeout':'AFK-Timeout'};
 async function loadProperties(){
- const host=$('propertiesFields');host.replaceChildren();txt('propertiesState','Lade server.properties …');$('propertiesSave').disabled=true;
+ const host=$('propertiesFields');host.replaceChildren();txt('propertiesState',tr('Lade server.properties …'));$('propertiesSave').disabled=true;
  try{
   const data=await api('properties-read');propertiesRevision=data.revision;propertiesOriginal={};
   for(const f of data.fields){
@@ -1024,18 +1088,18 @@ async function loadProperties(){
    field.addEventListener('input',propertyDirty);field.addEventListener('change',propertyDirty);
    wrap.append(label,key,field);host.append(wrap);
   }
-  txt('propertiesState',data.fields.length+' Einstellungen geladen · Noch keine Änderungen');
+  txt('propertiesState',data.fields.length+tr(' Einstellungen geladen · Noch keine Änderungen'));
  }catch(e){txt('propertiesState','Fehler: '+e.message);showNotice(e.message,true)}
 }
 function propertyChanges(){const changes={};document.querySelectorAll('[data-property-key]').forEach(el=>{if(el.value!==propertiesOriginal[el.dataset.propertyKey])changes[el.dataset.propertyKey]=el.value});return changes}
-function propertyDirty(){const count=Object.keys(propertyChanges()).length;$('propertiesSave').disabled=count===0;txt('propertiesState',count?count+' Änderung(en) noch nicht gespeichert':'Keine Änderungen')}
-$('propertiesReload').addEventListener('click',()=>{if(Object.keys(propertyChanges()).length&&!confirm('Ungespeicherte Änderungen verwerfen?'))return;loadProperties()});
+function propertyDirty(){const count=Object.keys(propertyChanges()).length;$('propertiesSave').disabled=count===0;txt('propertiesState',count?count+tr(' Änderung(en) noch nicht gespeichert'):tr('Keine Änderungen'))}
+$('propertiesReload').addEventListener('click',()=>{if(Object.keys(propertyChanges()).length&&!confirm(tr('Ungespeicherte Änderungen verwerfen?')))return;loadProperties()});
 $('propertiesSave').addEventListener('click',async()=>{
  const changes=propertyChanges();const keys=Object.keys(changes);if(!keys.length)return;
  const preview=keys.map(k=>k+': '+propertiesOriginal[k]+' → '+changes[k]).join('\n');
- if(!confirm('Folgende Änderungen speichern?\n\n'+preview+'\n\nMinecraft wird NICHT automatisch neu gestartet.'))return;
+ if(!confirm(tr('Folgende Änderungen speichern?\n\n')+preview+tr('\n\nMinecraft wird NICHT automatisch neu gestartet.')))return;
  $('propertiesSave').disabled=true;
- try{const d=await api('properties-save',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({revision:propertiesRevision,changes})});showNotice(d.changed+' Einstellung(en) gespeichert. Backup: '+d.backup+'. Minecraft bitte manuell neu starten.');await loadProperties();status()}
+ try{const d=await api('properties-save',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({revision:propertiesRevision,changes})});showNotice(d.changed+tr(' Einstellung(en) gespeichert. Backup: ')+d.backup+tr('. Minecraft bitte manuell neu starten.'));await loadProperties();status()}
  catch(e){showNotice(e.message,true);propertyDirty()}
 });
 
@@ -1044,14 +1108,14 @@ async function setupCheck(){
  try{const d=await api('setup-status');
    $('setupNav').hidden=d.installed;
    $('setupForm').hidden=d.installed||d.path_exists||d.service_exists;
-   txt('setupState',d.installed?'Minecraft ist bereits installiert.':(d.path_exists||d.service_exists)?'Eine vorhandene oder unvollständige Installation wurde erkannt. Aus Sicherheitsgründen wird nichts überschrieben.':'Kein Minecraft-Server vorhanden. Installation ist möglich.');
+   txt('setupState',d.installed?tr('Minecraft ist bereits installiert.'):(d.path_exists||d.service_exists)?tr('Eine vorhandene oder unvollständige Installation wurde erkannt. Aus Sicherheitsgründen wird nichts überschrieben.'):tr('Kein Minecraft-Server vorhanden. Installation ist möglich.'));
    if(!d.installed){document.querySelectorAll('a[data-tab]').forEach(a=>a.classList.remove('selected'));document.querySelectorAll('section.tab').forEach(x=>x.hidden=true);$('setup').hidden=false;$('setupNav').classList.add('selected');}
- }catch(e){showNotice('Setup-Prüfung: '+e.message,true)}
+ }catch(e){showNotice(tr('Setup-Prüfung: ')+e.message,true)}
 }
 $('setupForm').addEventListener('submit',async e=>{
  e.preventDefault();
  const data={server_name:$('setupServer').value.trim(),world_name:$('setupWorld').value.trim(),gamemode:$('setupMode').value,difficulty:$('setupDifficulty').value,port:Number($('setupPort').value),max_players:Number($('setupPlayers').value)};
- if(!confirm('Minecraft Bedrock jetzt offiziell herunterladen und installieren?'))return;
+ if(!confirm(tr('Minecraft Bedrock jetzt offiziell herunterladen und installieren?')))return;
  $('setupInstall').disabled=true;$('setupProgress').hidden=false;
  try{
   const r=await api('setup-install',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify(data)});
@@ -1061,11 +1125,21 @@ $('setupForm').addEventListener('submit',async e=>{
    const s=await api('setup-job&id='+encodeURIComponent(r.job_id));
    txt('setupProgress',s.message||s.state);
    if(s.state==='success'){showNotice(s.message);await setupCheck();refreshAll();return;}
-   if(s.state==='failed')throw Error(s.message||'Installation fehlgeschlagen');
+   if(s.state==='failed')throw Error(s.message||tr('Installation fehlgeschlagen'));
   }
-  throw Error('Zeitüberschreitung. Bitte Installationsprotokoll prüfen.');
+  throw Error(tr('Zeitüberschreitung. Bitte Installationsprotokoll prüfen.'));
  }catch(err){showNotice(err.message,true);txt('setupProgress',err.message)}finally{$('setupInstall').disabled=false}
 });
 // Call setup detection after login; preserve existing dashboard behaviour.
 const oldShowApp=showApp;
 showApp=function(){oldShowApp();setupCheck()};
+
+$('restoreDialog').addEventListener('cancel',event=>{if(busy)event.preventDefault();else{restoreSelection=null;restoreRequest++}});
+
+async function refreshRestoreState(){
+ const state=await api('status');
+ const stopped=state.service==='inactive';
+ $('restoreStop').disabled=stopped;
+ $('restoreSubmit').disabled=!stopped||!$('restoreTarget').options.length;
+ txt('restoreStatus',stopped?tr('Minecraft ist gestoppt. Die Zielwelt kann wiederhergestellt werden.'):tr('Bitte Minecraft vor der Wiederherstellung stoppen.'));
+}

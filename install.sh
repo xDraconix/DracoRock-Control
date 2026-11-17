@@ -193,7 +193,11 @@ done
 # Start the sampler only after its Python helper and the systemd units exist.
 systemctl daemon-reload
 systemctl enable --now bedrock-monitor.timer
-systemctl enable --now dracorock-backup.timer
+if [[ -f /etc/bedrock-control-pro/backup-schedule.json ]] && /usr/bin/python3 -c 'import json,sys; sys.exit(0 if json.load(open("/etc/bedrock-control-pro/backup-schedule.json")).get("enabled") is False else 1)'; then
+  systemctl disable --now dracorock-backup.timer
+else
+  systemctl enable --now dracorock-backup.timer
+fi
 # Existing installations need the same narrowly scoped ACLs as new web setups.
 if [[ -f "$SERVER/server.properties" ]]; then
   /usr/local/sbin/bedrock-config-access
