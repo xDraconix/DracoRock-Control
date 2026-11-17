@@ -17,7 +17,7 @@ recover() {
     echo 'FEHLER: Wiederherstellung der bisherigen Installation ...' >&2
     systemctl stop "$SERVICE" || true
     if [[ -n "$BACKUP" && -f "$BACKUP" ]]; then
-      tar -xzf "$BACKUP" -C /home/mcserver || true
+      tar --acls -xzf "$BACKUP" -C /home/mcserver || true
       chown -R mcserver:mcserver "$SERVER_DIR" || true
     fi
     systemctl start "$SERVICE" || true
@@ -100,7 +100,7 @@ if systemctl is-active --quiet "$SERVICE"; then
 fi
 
 echo "Sichere Installation nach $BACKUP ..."
-tar -czf "$BACKUP" -C /home/mcserver minecraft_bedrock
+tar --acls -czf "$BACKUP" -C /home/mcserver minecraft_bedrock
 # Neues Paket separat auspacken und nur Programmdateien aktualisieren.
 mkdir "$TMP_DIR/new"
 unzip -q "$TMP_DIR/server.zip" -d "$TMP_DIR/new"
@@ -121,6 +121,7 @@ done < <(find "$TMP_DIR/new" -type f -print0)
 chmod +x "$SERVER_DIR/bedrock_server"
 printf '%s\n' "$NEW_VERSION" > "$SERVER_DIR/.installed-bedrock-version"
 chown -R mcserver:mcserver "$SERVER_DIR"
+/usr/local/sbin/bedrock-config-access
 
 echo 'Starte Minecraft ...'
 systemctl start "$SERVICE"
