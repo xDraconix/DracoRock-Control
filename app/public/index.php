@@ -244,6 +244,21 @@ if($api!==null) {
    $args[]='_SYSTEMD_INVOCATION_ID='.$invocation;
   }elseif($type==='update'){
    $latest=run(['/usr/bin/systemctl','show',$unit,'--property=InvocationID','--value']);
+   if(!preg_match('/^[a-f0-9]{32}$/D',$latest['out'])){
+    $newest=0;
+    foreach(['/var/lib/bedrock-control-pro/jobs','/run/bedrock-panel-jobs'] as $directory){
+     foreach(glob($directory.'/*.json')?:[] as $file){
+      $job=json_decode((string)@file_get_contents($file),true);
+      if(!is_array($job)||!in_array($job['action']??'', ['update','backup'],true))continue;
+      $id=$job['invocation']??'';
+      $stamp=(int)($job['updated_at']??0);
+      if(is_string($id)&&preg_match('/^[a-f0-9]{32}$/D',$id)&&$stamp>$newest){
+       $latest['out']=$id;
+       $newest=$stamp;
+      }
+     }
+    }
+   }
    if(preg_match('/^[a-f0-9]{32}$/D',$latest['out']))$args[]='_SYSTEMD_INVOCATION_ID='.$latest['out'];
    else{
     $recent=run(['/usr/bin/journalctl','-u',$unit,'-n','1','--no-pager','--output=json']);
