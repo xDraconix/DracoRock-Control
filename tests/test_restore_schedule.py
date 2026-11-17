@@ -132,6 +132,14 @@ class ScheduleTests(unittest.TestCase):
                 self.assertEqual(command.call_count, 1)
                 self.assertEqual(record.call_args.args[0], "skipped")
 
+    def test_corrupt_saved_settings_do_not_enable_default_backups(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            path.write_text("{")
+            with patch.object(engine, "SCHEDULE_CONFIG", path):
+                with self.assertRaises(engine.BackupError):
+                    engine.schedule_config()
+
 
 if __name__ == "__main__":
     unittest.main()

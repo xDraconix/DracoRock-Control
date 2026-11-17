@@ -1,6 +1,14 @@
 'use strict';
 (() => {
  const messages={
+"Ungültiges Passwort":"Invalid password",
+"Zu viele Versuche. Bitte später erneut versuchen.":"Too many attempts. Please try again later.",
+"Backup-Timer konnte nicht aktualisiert werden":"Could not update the backup timer",
+"Zielwelt wurde inzwischen verändert":"The target world changed in the meantime",
+"Doppelte Pfade oder zu viele Dateien":"Duplicate paths or too many files",
+"Links, Spezialdateien und verschlüsselte Archive sind verboten":"Links, special files and encrypted archives are not allowed",
+"Weltarchiv ist zu groß":"World archive is too large",
+
 "Stopp":"Stop","Neustart":"Restart",
 "Minecraft ist gestoppt. Die Zielwelt kann wiederhergestellt werden.":"Minecraft is stopped. The target world can be restored.",
 "Bitte Minecraft vor der Wiederherstellung stoppen.":"Please stop Minecraft before restoring a world.",
@@ -523,7 +531,7 @@
  function translate(value){
   if(language!=='en'||typeof value!=='string')return value;
   const key=value.trim().replace(/\s+/g,' ');
-  const translated=messages[key];
+  const translated=Object.prototype.hasOwnProperty.call(messages,key)?messages[key]:undefined;
   if(translated===undefined)return value;
   return (value.match(/^\s*/)||[''])[0]+translated+(value.match(/\s*$/)||[''])[0];
  }

@@ -604,7 +604,7 @@ TIMER_OVERRIDE = Path("/etc/systemd/system/dracorock-backup.timer.d/schedule.con
 
 def schedule_config():
     defaults = {"enabled": True, "time": "04:00", "days": list(range(7)), "retry_minutes": 120}
-    return validate_schedule(read_record(SCHEDULE_CONFIG) or defaults)
+    return validate_schedule(read_record(SCHEDULE_CONFIG) if SCHEDULE_CONFIG.exists() else defaults)
 
 
 def validate_schedule(data):

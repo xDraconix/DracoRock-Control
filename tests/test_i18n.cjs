@@ -25,6 +25,7 @@ assert.equal(english.translate('Welt wiederherstellen'),'Restore world');
 assert.equal(english.translate('Backup-Zeitplan gespeichert.'),'Backup schedule saved.');
 assert.equal(english.translate('<img src=x onerror=alert(1)>'),'<img src=x onerror=alert(1)>');
 assert.equal(english.translate('My custom world'),'My custom world');
+assert.equal(english.translate('constructor'),'constructor');
 english.selector.value='de';english.selector.change();
 assert.deepEqual(english.saved(),['dracorock-language','de']);
 assert(english.reloaded());
