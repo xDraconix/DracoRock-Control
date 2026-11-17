@@ -36,7 +36,17 @@ if [[ "$ACTION" == update ]]; then
  OUTPUT="$(/usr/bin/mktemp)"
  trap 'rc=$?; rm -f "${OUTPUT:-}"; finish "$rc"' EXIT
  # tee keeps all updater output visible in journalctl.
- /bin/bash /root/update-mc2.sh 2>&1 | /usr/bin/tee "$OUTPUT"
+ update_rc=0
+ /bin/bash /root/update-mc2.sh 2>&1 | /usr/bin/tee "$OUTPUT" || update_rc=$?
+ # Older or customized updaters can restore files without their access ACLs.
+ acl_rc=0
+ /usr/local/sbin/bedrock-config-access || acl_rc=$?
+ if ((update_rc != 0)); then
+   exit "$update_rc"
+ fi
+ if ((acl_rc != 0)); then
+   exit "$acl_rc"
+ fi
  if /usr/bin/grep -qiE 'bereits installiert|kein update erforderlich' "$OUTPUT"; then
    FINAL_MESSAGE='Minecraft ist bereits aktuell. Kein Update erforderlich.'
  else
