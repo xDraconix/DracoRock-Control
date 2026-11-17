@@ -6,7 +6,7 @@ BACKUPS=/home/mcserver/backups
 SERVICE=mcbedrock.service
 ACTION="${1:-}"
 JOB_ID="${2:-}"
-[[ "$ACTION" == update || "$ACTION" == backup ]] || exit 2
+[[ "$ACTION" == update || "$ACTION" == backup || "$ACTION" == restore-world ]] || exit 2
 [[ "$JOB_ID" =~ ^[a-f0-9]{32}$ ]] || { echo 'Ungueltige Auftrags-ID' >&2; exit 2; }
 JOB_DIR=/run/bedrock-panel-jobs
 JOB_FILE="$JOB_DIR/$JOB_ID.json"
@@ -36,6 +36,7 @@ FINAL_MESSAGE='Auftrag fehlgeschlagen. Protokoll pruefen.'
 finish() {
  local rc="$1"
  trap - EXIT
+ /usr/bin/rm -f "$JOB_DIR/$JOB_ID.request.json"
  if ((rc==0)); then
    write_status success "$FINAL_MESSAGE" 0
  else
@@ -44,7 +45,11 @@ finish() {
 }
 trap 'finish "$?"' EXIT
 write_status running 'Auftrag wird ausgefuehrt' null
-if [[ "$ACTION" == update ]]; then
+if [[ "$ACTION" == restore-world ]]; then
+ write_status running 'Pruefe Weltbackup und sichere die aktuelle Zielwelt.' null
+ /usr/local/sbin/dracorock-backup-manager restore-world < "$JOB_DIR/$JOB_ID.request.json"
+ FINAL_MESSAGE='Welt wiederhergestellt. Minecraft kann jetzt gestartet werden.'
+elif [[ "$ACTION" == update ]]; then
  [[ -f /root/update-mc2.sh ]] || { echo 'Update-Skript fehlt: /root/update-mc2.sh' >&2; exit 1; }
  OUTPUT="$(/usr/bin/mktemp)"
  trap 'rc=$?; rm -f "${OUTPUT:-}"; finish "$rc"' EXIT

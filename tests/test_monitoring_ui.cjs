@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 'use strict';
+global.tr=value=>value;
 // Lightweight, dependency-free tests of monitoring chart data semantics.
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -63,7 +64,7 @@ assert(js.includes('(geschätzt)'), 'hover tooltip must disclose interpolation')
 assert(js.includes('monitorX(index,points.length,width)'), 'shared aligned x position');
 assert(js.includes("canvas.addEventListener('pointermove'"), 'pointer-driven inspection');
 assert(js.includes("canvas.addEventListener('keydown'"), 'keyboard inspection');
-assert(js.includes("p.samples===0?'Keine Messung':'Wert nicht verfügbar'"),'missing sample semantics');
+assert(js.includes("p.samples===0?tr('Keine Messung'):tr('Wert nicht verfügbar')"),'missing sample semantics');
 console.log('OK: monitoring chart statistics, zero/null distinctions, synchronized tooltip and keyboard hooks');
 
 assert(html.includes('id="dashboardAlerts"'),'dashboard must contain the alert summary');

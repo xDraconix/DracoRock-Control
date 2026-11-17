@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Create and verify offline Minecraft backups and retain calendar snapshots."""
 import argparse
+import contextlib
+import ctypes
 from datetime import datetime
 import fcntl
 import hashlib
@@ -420,7 +422,7 @@ def archive_to_zip(source, target, scope, max_output):
     require(bool(seen) and target.tell() <= max_output, "ZIP-Export unvollstaendig")
 
 
-def download_backup(archive_id):
+def open_backup(archive_id):
     require(re.fullmatch(r"[a-f0-9]{64}", archive_id) is not None, "Ungueltige Backup-ID")
     selected = None
 
@@ -438,7 +440,11 @@ def download_backup(archive_id):
 
     visit_backups(select)
     require(selected is not None, "Backup nicht gefunden")
-    scope, name, source = selected
+    return selected
+
+
+def download_backup(archive_id):
+    scope, name, source = open_backup(archive_id)
     with source:
         if name.endswith(".zip"):
             send_zip(source, name)
@@ -493,9 +499,180 @@ def delete_backup(archive_id):
     return {"ok": True}
 
 
+@contextlib.contextmanager
+def world_archive(archive_id):
+    scope, name, source = open_backup(archive_id)
+    with source, contextlib.ExitStack() as stack:
+        require(scope == "worlds", "Bitte ein Weltbackup auswählen")
+        if not name.endswith(".zip"):
+            converted = stack.enter_context(tempfile.TemporaryFile(dir=LOCK.parent))
+            archive_to_zip(source, converted, scope, shutil.disk_usage(LOCK.parent).free // 2)
+            converted.seek(0)
+            source = converted
+        archive = stack.enter_context(ZipFile(source))
+        yield name, archive
+
+
+def inspect_world_archive(archive):
+    seen = set()
+    total = 0
+    for item in archive.infolist():
+        name = item.filename.rstrip("/")
+        parts = name.split("/")
+        mode = item.external_attr >> 16
+        require(name and all(part not in ("", ".", "..") for part in parts)
+                and not re.search(r'[\\:\x00-\x1f]', name), "Unsicherer Archivpfad")
+        require(name not in seen and len(seen) < MAX_FILES, "Doppelte Pfade oder zu viele Dateien")
+        require(not stat.S_ISLNK(mode) and (stat.S_IFMT(mode) in (0, stat.S_IFREG, stat.S_IFDIR))
+                and not item.flag_bits & 1, "Links, Spezialdateien und verschlüsselte Archive sind verboten")
+        seen.add(name)
+        total += item.file_size
+        require(total <= MAX_BYTES, "Weltarchiv ist zu groß")
+    require("level.dat" in seen and not archive.getinfo("level.dat").is_dir()
+            and any(item.filename.startswith("db/") and not item.is_dir() for item in archive.infolist()),
+            "Weltbackup benötigt level.dat und eine db-Datenbank")
+    return {"files": len(seen), "bytes": total}
+
+
+def restore_preview(request):
+    require(isinstance(request, dict) and isinstance(request.get("id"), str), "Ungültige Backup-Auswahl")
+    with world_archive(request["id"]) as (name, archive):
+        details = inspect_world_archive(archive)
+    return {"ok": True, "id": request["id"], "name": name, **details,
+            "targets": [source.name for source in worlds()]}
+
+
+def restore_world(request):
+    require(isinstance(request, dict) and isinstance(request.get("id"), str), "Ungültige Backup-Auswahl")
+    target_name = request.get("target")
+    require(isinstance(target_name, str) and 1 <= len(target_name) <= 80
+            and target_name == target_name.strip() and target_name not in (".", "..")
+            and not re.search(r'[/\\:\x00-\x1f]', target_name), "Ungültige Zielwelt")
+    target = SERVER / "worlds" / target_name
+    require(target in worlds(), "Die ausgewählte Zielwelt existiert nicht")
+    offline()
+    original = target.stat()
+    with world_archive(request["id"]) as (_, archive):
+        details = inspect_world_archive(archive)
+        _, current_size = inspect_tree(target)
+        require(shutil.disk_usage(target.parent).free >= details["bytes"] + current_size + 256 * 1024 ** 2,
+                "Nicht genug Speicher für Wiederherstellung und Sicherung")
+        with tempfile.TemporaryDirectory(prefix=".dracorock-restore-", dir=target.parent) as directory:
+            stage = Path(directory) / "world"
+            stage.mkdir()
+            for item in archive.infolist():
+                destination = stage / item.filename
+                if item.is_dir():
+                    destination.mkdir(parents=True, exist_ok=True)
+                    continue
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(item) as source, destination.open("xb") as output:
+                    shutil.copyfileobj(source, output, 1024 * 1024)
+                    output.flush()
+                    os.fsync(output.fileno())
+            inspect_tree(stage)
+            account = pwd.getpwnam("mcserver")
+            for entry in [stage, *stage.rglob("*")]:
+                os.chown(entry, account.pw_uid, account.pw_gid)
+                os.chmod(entry, 0o750 if entry.is_dir() else 0o640)
+                if entry.is_dir():
+                    sync_directory(entry)
+            snapshot = world_zip(target, world_directory(target))
+            offline()
+            current = target.lstat()
+            require(stat.S_ISDIR(current.st_mode) and
+                    (current.st_dev, current.st_ino) == (original.st_dev, original.st_ino),
+                    "Zielwelt wurde inzwischen verändert")
+            # Linux renameat2 exchanges both directories in one atomic operation.
+            libc = ctypes.CDLL(None, use_errno=True)
+            exchange = libc.renameat2
+            exchange.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+            exchange.restype = ctypes.c_int
+            if exchange(-100, os.fsencode(stage), -100, os.fsencode(target), 2) != 0:
+                raise OSError(ctypes.get_errno(), "Atomarer Weltwechsel fehlgeschlagen")
+            sync_directory(target.parent)
+            sync_directory(stage.parent)
+    return {"ok": True, "target": target_name, "safety_backup": snapshot.name}
+
+
 MAINTENANCE = Path("/var/lib/bedrock-control-pro/maintenance")
 JOBS = Path("/var/lib/bedrock-control-pro/jobs")
 RUNTIME_JOBS = Path("/run/bedrock-panel-jobs")
+SCHEDULE_CONFIG = Path("/etc/bedrock-control-pro/backup-schedule.json")
+TIMER_OVERRIDE = Path("/etc/systemd/system/dracorock-backup.timer.d/schedule.conf")
+
+
+def schedule_config():
+    defaults = {"enabled": True, "time": "04:00", "days": list(range(7)), "retry_minutes": 120}
+    return validate_schedule(read_record(SCHEDULE_CONFIG) or defaults)
+
+
+def validate_schedule(data):
+    require(isinstance(data, dict) and set(data) == {"enabled", "time", "days", "retry_minutes"},
+            "Ungültiger Backup-Zeitplan")
+    require(type(data["enabled"]) is bool and isinstance(data["time"], str)
+            and re.fullmatch(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]", data["time"]),
+            "Uhrzeit muss HH:MM sein")
+    require(isinstance(data["days"], list) and 1 <= len(data["days"]) <= 7
+            and all(type(day) is int and 0 <= day <= 6 for day in data["days"])
+            and len(set(data["days"])) == len(data["days"]), "Wochentage sind ungültig")
+    require(type(data["retry_minutes"]) is int and 0 <= data["retry_minutes"] <= 120,
+            "Wiederholungsfenster muss zwischen 0 und 120 Minuten liegen")
+    return {**data, "days": sorted(data["days"])}
+
+
+def atomic_text(path, text, mode=0o600):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        fd, name = tempfile.mkstemp(prefix=".dracorock-", dir=path.parent)
+        temporary = Path(name)
+        with os.fdopen(fd, "w") as output:
+            output.write(text)
+            output.flush()
+            os.fsync(output.fileno())
+        os.chmod(temporary, mode)
+        os.replace(temporary, path)
+        sync_directory(path.parent)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def save_schedule(data):
+    settings = validate_schedule(data)
+    MAINTENANCE.mkdir(mode=0o755, parents=True, exist_ok=True)
+    with (MAINTENANCE / "settings.lock").open("a") as guard:
+        fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        old_config = SCHEDULE_CONFIG.read_bytes() if SCHEDULE_CONFIG.exists() else None
+        old_override = TIMER_OVERRIDE.read_bytes() if TIMER_OVERRIDE.exists() else None
+        was_enabled = command("/usr/bin/systemctl", "is-enabled", "dracorock-backup.timer").returncode == 0
+        was_active = command("/usr/bin/systemctl", "is-active", "dracorock-backup.timer").returncode == 0
+        weekdays = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+        calendar = ",".join(weekdays[day] for day in settings["days"])
+        override = "[Timer]\nOnCalendar=\n"
+        override += f"OnCalendar={calendar} *-*-* {settings['time']}:00 Europe/Berlin\n"
+        try:
+            atomic_text(SCHEDULE_CONFIG, json.dumps(settings))
+            atomic_text(TIMER_OVERRIDE, override, 0o644)
+            actions = [("daemon-reload",),
+                       ("enable" if settings["enabled"] else "disable", "--now", "dracorock-backup.timer")]
+            if settings["enabled"]:
+                actions.append(("restart", "dracorock-backup.timer"))
+            for args in actions:
+                require(command("/usr/bin/systemctl", *args).returncode == 0,
+                        "Backup-Timer konnte nicht aktualisiert werden")
+        except BaseException:
+            for path, previous in ((SCHEDULE_CONFIG, old_config), (TIMER_OVERRIDE, old_override)):
+                if previous is None:
+                    path.unlink(missing_ok=True)
+                else:
+                    atomic_text(path, previous.decode(), 0o644 if path == TIMER_OVERRIDE else 0o600)
+            command("/usr/bin/systemctl", "daemon-reload")
+            command("/usr/bin/systemctl", "enable" if was_enabled else "disable", "dracorock-backup.timer")
+            command("/usr/bin/systemctl", "restart" if was_active else "stop", "dracorock-backup.timer")
+            raise
+    return {"ok": True, "settings": settings}
 
 
 def command(*arguments):
@@ -533,7 +710,7 @@ def history():
                 continue
             record = read_record(path)
             if record.get("id") != path.stem or record.get("action") not in (
-                    "backup", "update", "start", "stop", "restart"):
+                    "backup", "update", "start", "stop", "restart", "restore-world"):
                 continue
             record.setdefault("updated_at", int(path.stat().st_mtime))
             records[path.stem] = record
@@ -541,6 +718,7 @@ def history():
 
 
 def maintenance_status():
+    settings = schedule_config()
     jobs = history()
     successful = [job for job in jobs if job["action"] == "backup" and job.get("state") == "success"]
     latest = read_record(JOBS.parent / "last-backup.json")
@@ -556,6 +734,9 @@ def maintenance_status():
         checks.append({"name": filename, "ok": result.returncode == 0,
                        "message": "Lesbar" if result.returncode == 0 else "Webserver kann die Datei nicht lesen"})
     for unit in ("mcbedrock.service", "bedrock-monitor.timer", "dracorock-backup.timer"):
+        if unit == "dracorock-backup.timer" and not settings["enabled"]:
+            checks.append({"name": unit, "ok": True, "message": "Geplante Backups sind deaktiviert."})
+            continue
         result = command("/usr/bin/systemctl", "is-active", unit)
         checks.append({"name": unit, "ok": result.returncode == 0,
                        "message": result.stdout.strip() or "Unbekannt"})
@@ -568,7 +749,7 @@ def maintenance_status():
         if service.stdout.strip() not in ("active", "activating"):
             schedule = {**schedule, "state": "interrupted",
                         "message": "Der geplante Lauf wurde unterbrochen. Auftragsverlauf prüfen."}
-    return {"ok": True, "schedule": schedule,
+    return {"ok": True, "schedule": schedule, "settings": settings,
             "timer": dict(line.split("=", 1) for line in timer.stdout.splitlines() if "=" in line),
             "last_success": successful[0] if successful else None, "jobs": jobs, "checks": checks}
 
@@ -578,8 +759,14 @@ def scheduled_backup():
     MAINTENANCE.mkdir(mode=0o755, parents=True, exist_ok=True)
     with (MAINTENANCE / "schedule.lock").open("a") as guard:
         fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        deadline = time.monotonic() + 2 * 60 * 60
-        while time.monotonic() < deadline:
+        settings = schedule_config()
+        deadline = time.monotonic() + settings["retry_minutes"] * 60
+        first = True
+        while first or time.monotonic() < deadline:
+            first = False
+            if not schedule_config()["enabled"]:
+                write_schedule("skipped", "Geplante Backups sind deaktiviert.")
+                return
             query = command("/usr/local/sbin/bedrock-console-manager", "online")
             try:
                 roster = json.loads(query.stdout)
@@ -609,15 +796,17 @@ def scheduled_backup():
                 reason = "Spieler sind online."
             else:
                 reason = "Die Spielerabfrage ist vorübergehend nicht verfügbar."
+            if time.monotonic() >= deadline:
+                break
             write_schedule("waiting", reason + " Nächster Versuch in fünf Minuten.",
                            retry_at=int(time.time()) + 300)
             time.sleep(min(300, max(0, deadline - time.monotonic())))
-        write_schedule("skipped", "Das zweistündige Zeitfenster ist abgelaufen. Heute wurde kein Backup gestartet.")
+        write_schedule("skipped", "Das Wiederholungsfenster ist abgelaufen. Es wurde kein Backup gestartet.")
 
 
 def main():
     parser = argparse.ArgumentParser(description="DracoRock Backup-Engine")
-    parser.add_argument("command", choices=("create", "world", "verify", "preflight", "list", "download", "delete", "status", "scheduled"))
+    parser.add_argument("command", choices=("create", "world", "verify", "preflight", "list", "download", "delete", "status", "scheduled", "schedule-save", "restore-preview", "restore-world"))
     parser.add_argument("archive", nargs="?")
     args = parser.parse_args()
     require(os.geteuid() == 0, "Nur als root ausfuehrbar")
@@ -628,6 +817,9 @@ def main():
         return
     if args.command == "scheduled":
         scheduled_backup()
+        return
+    if args.command == "schedule-save":
+        print(json.dumps(save_schedule(json.loads(sys.stdin.read(2048)))))
         return
     if args.command == "download":
         download_backup(sys.stdin.readline(66).rstrip("\n"))
@@ -641,7 +833,10 @@ def main():
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             raise BackupError("Ein Backup-Auftrag laeuft bereits") from exc
-        if args.command == "delete":
+        if args.command in ("restore-preview", "restore-world"):
+            request = json.loads(sys.stdin.read(2048))
+            result = restore_preview(request) if args.command == "restore-preview" else restore_world(request)
+        elif args.command == "delete":
             result = delete_backup(sys.stdin.readline(66).rstrip("\n"))
         elif args.command == "preflight":
             check_backup_dir()

@@ -16,6 +16,12 @@ loader.exec_module(engine)
 
 
 class MaintenanceTests(unittest.TestCase):
+    def setUp(self):
+        guard = patch.object(engine, "schedule_config", return_value={
+            "enabled": True, "time": "04:00", "days": list(range(7)), "retry_minutes": 120})
+        guard.start()
+        self.addCleanup(guard.stop)
+
     def schedule(self, responses, terminal="success"):
         clock = [0]
         records = []

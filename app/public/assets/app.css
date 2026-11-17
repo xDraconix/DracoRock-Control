@@ -571,3 +571,14 @@ footer{border-top:1px solid #32494d;padding-top:20px;color:#92a9ad}
 .maintenance-warning{color:#f4cc79}
 .maintenance-checks{padding-top:.4rem}
 #jobHistory{max-width:min(100%,36rem)}
+.backup-schedule{margin:1rem 0;padding:1rem;border:1px solid var(--line,#426674);border-radius:10px}
+#scheduleForm{display:grid;gap:.8rem;margin-top:1rem;max-width:600px}
+#scheduleForm label{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+#scheduleDays{display:flex;gap:.6rem;flex-wrap:wrap}
+input[type=checkbox]{width:auto;accent-color:#71d9bc}
+dialog{color:#e9f3f1;background:#122530;border:1px solid #426674;border-radius:12px;padding:1.5rem;width:min(620px,calc(100% - 2rem));max-height:90vh;overflow:auto}
+dialog::backdrop{background:#000b}
+#restoreForm{display:grid;gap:1rem}
+.restore-confirm{display:flex;gap:.7rem;align-items:start}
+.language-label{display:flex;align-items:center;gap:.5rem;font-size:.8rem}
+.language-select{width:auto}

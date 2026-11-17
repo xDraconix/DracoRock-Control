@@ -5,3 +5,4 @@ www-data ALL=(root) NOPASSWD: /usr/local/sbin/bedrock-monitor-manager history 1h
 www-data ALL=(root) NOPASSWD: /usr/local/sbin/dracorock-backup-manager list, /usr/local/sbin/dracorock-backup-manager download, /usr/local/sbin/dracorock-backup-manager delete
 www-data ALL=(root) NOPASSWD: /usr/local/sbin/bedrock-monitor-manager player-history
 www-data ALL=(root) NOPASSWD: /usr/local/sbin/dracorock-backup-manager status
+www-data ALL=(root) NOPASSWD: /usr/local/sbin/dracorock-backup-manager schedule-save, /usr/local/sbin/dracorock-backup-manager restore-preview

@@ -3,7 +3,7 @@ set -euo pipefail
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 [[ $# -eq 1 ]] || { echo 'Exactly one action required' >&2; exit 2; }
 case "$1" in
- start|stop|restart|update|backup)
+ start|stop|restart|update|backup|restore-world)
    action="$1"
    # Atomic admission control for all panel jobs (prevents duplicate clicks/races).
    JOB_DIR=/run/bedrock-panel-jobs
@@ -14,6 +14,19 @@ case "$1" in
      /usr/bin/systemctl is-active --quiet "$unit" && { echo 'Ein Auftrag läuft bereits' >&2; exit 1; }
    done
    JOB_ID="$(/usr/bin/od -An -N16 -tx1 /dev/urandom | /usr/bin/tr -d ' \n')"
+   if [[ "$action" == restore-world ]]; then
+     request_file="$JOB_DIR/$JOB_ID.request.json"
+     umask 077
+     if ! /usr/bin/python3 -c 'import json,re,sys
+data=json.loads(sys.stdin.read(2048))
+assert isinstance(data,dict) and set(data)=={"id","target"}
+assert isinstance(data["id"],str) and re.fullmatch("[a-f0-9]{64}",data["id"])
+assert isinstance(data["target"],str) and 1<=len(data["target"])<=80
+json.dump(data,sys.stdout)' > "$request_file"; then
+       /usr/bin/rm -f "$request_file"
+       exit 2
+     fi
+   fi
    /usr/bin/printf '{"id":"%s","action":"%s","state":"queued","message":"Auftrag gestartet","exit_status":null}\n' "$JOB_ID" "$action" > "$JOB_DIR/$JOB_ID.json"
    /usr/bin/chown root:www-data "$JOB_DIR/$JOB_ID.json"
    /usr/bin/chmod 0640 "$JOB_DIR/$JOB_ID.json"
@@ -28,6 +41,7 @@ case "$1" in
      echo "JOB_ID=$JOB_ID"
    else
      /usr/bin/rm -f "$JOB_DIR/$JOB_ID.json"
+     /usr/bin/rm -f "$JOB_DIR/$JOB_ID.request.json"
      exit 1
    fi ;;
  *) echo 'Unsupported action' >&2; exit 2 ;;
