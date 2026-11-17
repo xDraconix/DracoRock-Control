@@ -493,14 +493,139 @@ def delete_backup(archive_id):
     return {"ok": True}
 
 
+MAINTENANCE = Path("/var/lib/bedrock-control-pro/maintenance")
+JOBS = Path("/var/lib/bedrock-control-pro/jobs")
+RUNTIME_JOBS = Path("/run/bedrock-panel-jobs")
+
+
+def command(*arguments):
+    try:
+        return subprocess.run(arguments, capture_output=True, text=True, timeout=15)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(arguments, 124, "", "Zeitlimit überschritten")
+
+
+def read_record(path):
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def write_schedule(state, message, **fields):
+    MAINTENANCE.mkdir(mode=0o755, parents=True, exist_ok=True)
+    record = {"state": state, "message": message, "updated_at": int(time.time()), **fields}
+    with tempfile.NamedTemporaryFile(mode="w", dir=MAINTENANCE, delete=False) as output:
+        json.dump(record, output)
+        temporary = output.name
+    os.replace(temporary, MAINTENANCE / "schedule.json")
+    print(json.dumps(record), flush=True)
+
+
+def history():
+    records = {}
+    for directory in (JOBS, RUNTIME_JOBS):
+        if not directory.is_dir():
+            continue
+        for path in directory.glob("*.json"):
+            if not re.fullmatch(r"[a-f0-9]{32}", path.stem):
+                continue
+            record = read_record(path)
+            if record.get("id") != path.stem or record.get("action") not in (
+                    "backup", "update", "start", "stop", "restart"):
+                continue
+            record.setdefault("updated_at", int(path.stat().st_mtime))
+            records[path.stem] = record
+    return sorted(records.values(), key=lambda item: item["updated_at"], reverse=True)[:50]
+
+
+def maintenance_status():
+    jobs = history()
+    successful = [job for job in jobs if job["action"] == "backup" and job.get("state") == "success"]
+    latest = read_record(JOBS.parent / "last-backup.json")
+    if latest.get("state") == "success" and latest.get("action") == "backup":
+        successful.append(latest)
+        successful.sort(key=lambda job: job["updated_at"], reverse=True)
+    timer = command("/usr/bin/systemctl", "show", "dracorock-backup.timer",
+                    "--property=ActiveState,NextElapseUSecRealtime", "--no-pager")
+    checks = []
+    for filename in ("server.properties", ".installed-bedrock-version"):
+        result = command("/usr/sbin/runuser", "-u", "www-data", "--", "/usr/bin/test",
+                         "-r", str(SERVER / filename))
+        checks.append({"name": filename, "ok": result.returncode == 0,
+                       "message": "Lesbar" if result.returncode == 0 else "Webserver kann die Datei nicht lesen"})
+    for unit in ("mcbedrock.service", "bedrock-monitor.timer", "dracorock-backup.timer"):
+        result = command("/usr/bin/systemctl", "is-active", unit)
+        checks.append({"name": unit, "ok": result.returncode == 0,
+                       "message": result.stdout.strip() or "Unbekannt"})
+    usage = shutil.disk_usage(SERVER if SERVER.exists() else "/")
+    checks.append({"name": "Freier Speicher", "ok": usage.free >= 1024 ** 3,
+                   "message": f"{usage.free / 1024 ** 3:.1f} GiB verfügbar"})
+    schedule = read_record(MAINTENANCE / "schedule.json")
+    if schedule.get("state") in ("running", "waiting"):
+        service = command("/usr/bin/systemctl", "is-active", "dracorock-backup.service")
+        if service.stdout.strip() not in ("active", "activating"):
+            schedule = {**schedule, "state": "interrupted",
+                        "message": "Der geplante Lauf wurde unterbrochen. Auftragsverlauf prüfen."}
+    return {"ok": True, "schedule": schedule,
+            "timer": dict(line.split("=", 1) for line in timer.stdout.splitlines() if "=" in line),
+            "last_success": successful[0] if successful else None, "jobs": jobs, "checks": checks}
+
+
+def scheduled_backup():
+    """Retry admission for two hours, then monitor the one admitted backup."""
+    MAINTENANCE.mkdir(mode=0o755, parents=True, exist_ok=True)
+    with (MAINTENANCE / "schedule.lock").open("a") as guard:
+        fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        deadline = time.monotonic() + 2 * 60 * 60
+        while time.monotonic() < deadline:
+            query = command("/usr/local/sbin/bedrock-console-manager", "online")
+            try:
+                roster = json.loads(query.stdout)
+            except ValueError:
+                roster = {}
+            empty = (query.returncode == 0 and roster.get("ok") is True
+                     and type(roster.get("count")) is int and roster["count"] == 0)
+            if empty:
+                queued = command("/usr/local/sbin/bedrock-panel-control", "backup")
+                match = re.search(r"JOB_ID=([a-f0-9]{32})", queued.stdout)
+                if queued.returncode == 0 and match:
+                    job_id = match.group(1)
+                    write_schedule("running", "Geplantes Backup läuft.", job_id=job_id)
+                    # Queue exactly once. A stalled worker must never cause a second backup.
+                    for _ in range(600):
+                        job = read_record(RUNTIME_JOBS / (job_id + ".json"))
+                        if job.get("state") in ("success", "failed"):
+                            write_schedule(job["state"], job.get("message", ""), job_id=job_id)
+                            return
+                        time.sleep(3)
+                    write_schedule("failed", "Auftrag nach 30 Minuten noch ohne Abschluss. Auftragsverlauf prüfen.", job_id=job_id)
+                    return
+                reason = "Ein anderer Steuerauftrag läuft oder die Backup-Annahme ist fehlgeschlagen."
+            elif query.returncode == 0 and type(roster.get("count")) is int and roster["count"] > 0:
+                reason = "Spieler sind online."
+            else:
+                reason = "Die Spielerabfrage ist vorübergehend nicht verfügbar."
+            write_schedule("waiting", reason + " Nächster Versuch in fünf Minuten.",
+                           retry_at=int(time.time()) + 300)
+            time.sleep(min(300, max(0, deadline - time.monotonic())))
+        write_schedule("skipped", "Das zweistündige Zeitfenster ist abgelaufen. Heute wurde kein Backup gestartet.")
+
+
 def main():
     parser = argparse.ArgumentParser(description="DracoRock Backup-Engine")
-    parser.add_argument("command", choices=("create", "world", "verify", "preflight", "list", "download", "delete"))
+    parser.add_argument("command", choices=("create", "world", "verify", "preflight", "list", "download", "delete", "status", "scheduled"))
     parser.add_argument("archive", nargs="?")
     args = parser.parse_args()
     require(os.geteuid() == 0, "Nur als root ausfuehrbar")
     require((args.command in ("verify", "world")) == (args.archive is not None),
             "verify und world benoetigen genau einen Namen")
+    if args.command == "status":
+        print(json.dumps(maintenance_status(), ensure_ascii=False))
+        return
+    if args.command == "scheduled":
+        scheduled_backup()
+        return
     if args.command == "download":
         download_backup(sys.stdin.readline(66).rstrip("\n"))
         return

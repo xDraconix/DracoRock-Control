@@ -566,3 +566,8 @@ footer{border-top:1px solid #32494d;padding-top:20px;color:#92a9ad}
 .monitor-player-history{max-height:28rem;overflow:auto}
 .monitor-player-history table{width:100%;border-collapse:collapse}
 .monitor-player-history th,.monitor-player-history td{text-align:left;padding:.65rem;border-bottom:1px solid var(--dr-frame);white-space:nowrap}
+/* Maintenance summaries share the panel's accessible status colors. */
+.maintenance-ok{color:#9ee6ce}
+.maintenance-warning{color:#f4cc79}
+.maintenance-checks{padding-top:.4rem}
+#jobHistory{max-width:min(100%,36rem)}

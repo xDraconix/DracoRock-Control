@@ -427,8 +427,43 @@ function backupSize(bytes){
  if(bytes>=1024)return (bytes/1024).toFixed(1)+' KiB';
  return bytes+' B';
 }
+async function loadMaintenance(){
+ try{
+  const data=await api('maintenance');
+  const labels={waiting:'Wartet',running:'Läuft',success:'Erfolgreich',failed:'Fehlgeschlagen',skipped:'Übersprungen',queued:'Vorgemerkt',interrupted:'Unterbrochen'};
+  const format=stamp=>new Date(stamp*1000).toLocaleString('de-DE');
+  const last=data.last_success;
+  const summary=last?'Letzter erfolgreich abgeschlossener Backup-Auftrag: '+format(last.updated_at):'Noch kein erfolgreicher Backup-Auftrag im neuen Verlauf erfasst.';
+  txt('backupSummary',summary);
+  txt('backupSummaryDetail',summary);
+  const schedule=data.schedule;
+  const next=data.timer.NextElapseUSecRealtime;
+  txt('backupSchedule',(schedule.state?(labels[schedule.state]||schedule.state)+' · '+schedule.message+' ':'')+(next?'Nächster täglicher Termin: '+next:'Backup-Timer hat keinen nächsten Termin.'));
+  const checks=$('systemChecks');checks.replaceChildren();
+  for(const check of data.checks){
+   const row=document.createElement('p');
+   row.textContent=(check.ok?'✓ ':'⚠ ')+check.name+' — '+check.message;
+   row.className=check.ok?'maintenance-ok':'maintenance-warning';
+   checks.append(row);
+  }
+  const select=$('jobHistory'), selected=select.value;
+  select.replaceChildren(new Option('Aktueller Lauf',''));
+  for(const job of data.jobs){
+   if(!/^[a-f0-9]{32}$/.test(job.invocation||''))continue;
+   const actions={backup:'Backup',update:'Minecraft-Update',start:'Start',stop:'Stopp',restart:'Neustart'};
+   const option=new Option(format(job.started_at||job.updated_at)+' · '+actions[job.action]+' · '+(labels[job.state]||job.state),job.invocation);
+   option.dataset.type=['start','stop','restart'].includes(job.action)?'server':'update';
+   select.append(option);
+  }
+  if([...select.options].some(option=>option.value===selected))select.value=selected;
+ }catch(error){
+  txt('backupSummary',error.message);
+  txt('backupSummaryDetail',error.message);
+ }
+}
+setInterval(()=>{if(!$('app').hidden)loadMaintenance()},30000);
 async function deleteBackup(file,button){
- if(!window.confirm('Backup „'+file.name+'“ endgültig löschen?'))return;
+ if(!window.confirm('Backup „'+file.name+'“ vom '+file.date+' ('+backupSize(file.size)+') endgültig löschen? Diese Sicherung wird dauerhaft entfernt.'))return;
  button.disabled=true;
  try{
   await api('backup-delete',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({id:file.id})});
@@ -456,7 +491,7 @@ function renderBackupList(id,files){
   link.type='button';
   link.addEventListener('click',()=>window.location.assign('?api=backup-download&id='+encodeURIComponent(file.id)));
   link.setAttribute('aria-label','ZIP herunterladen: '+file.name);
-  remove.className='secondary';
+  remove.className='danger';
   remove.type='button';
   remove.textContent='Löschen';
   remove.setAttribute('aria-label','Backup löschen: '+file.name);
@@ -479,7 +514,7 @@ async function backups(){
   showNotice(e.message,true);
  }
 }
-async function logs(){try{const d=await api('logs&type='+encodeURIComponent($('logType').value));txt('logOutput',d.logs||'Keine Einträge.')}catch(e){showNotice(e.message,true)}}function refreshAll(){status();backups();logs();loadDashboardAlerts();loadBedrockUpdate()}async function action(name){
+async function logs(){try{const d=await api('logs&type='+encodeURIComponent($('logType').value)+'&invocation='+encodeURIComponent($('jobHistory').value));txt('logOutput',d.logs||'Keine Einträge.')}catch(e){showNotice(e.message,true)}}function refreshAll(){status();backups();loadMaintenance();logs();loadDashboardAlerts();loadBedrockUpdate()}async function action(name){
  if(busy)return;
  const labels={start:'Server starten',stop:'Server stoppen',restart:'Server neu starten',update:'Update starten (Server wird ggf. neu gestartet)',backup:'Backup erstellen (kurze Unterbrechung möglich)'};
  if(!confirm(labels[name]+'?'))return;
@@ -614,7 +649,7 @@ $('panelStartUpdate').addEventListener('click',async()=>{
 });
 $('panelShowUpdateLog').addEventListener('click',pollPanelUpdate);
 $('panelCheckReleases').addEventListener('click',loadPanelRelease);
-$('loginForm').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api('login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});csrf=d.csrf;$('password').value='';txt('loginError','');showApp()}catch(e){txt('loginError',e.message)}});document.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>action(b.dataset.action)));document.querySelectorAll('[data-tab]').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.remove('selected'));a.classList.add('selected');document.querySelectorAll('.tab').forEach(x=>x.hidden=x.id!==a.dataset.tab);txt('pageTitle',({overview:'Serverübersicht',update:'Minecraft-Updates','panel-update':'Panel-Updates',worlds:'Welten-Manager',addons:'Add-on Manager',settings:'Server-Einstellungen',console:'Live-Konsole',monitor:'Live-Servermonitoring',players:'Spielerverwaltung',backups:'Backup-Verwaltung',logs:'Systemprotokolle'})[a.dataset.tab]);if(a.dataset.tab==='panel-update')loadPanelRelease();if(a.dataset.tab==='logs')logs();if(a.dataset.tab==='backups')backups();if(a.dataset.tab==='addons')loadAddons();if(a.dataset.tab==='settings')loadProperties();if(a.dataset.tab==='worlds')loadWorlds();if(a.dataset.tab==='console')loadConsole();if(a.dataset.tab==='overview')loadDashboardAlerts();if(a.dataset.tab==='monitor')loadMonitoring();if(a.dataset.tab==='players'){status();loadPlayers();loadOnlinePlayers()}}));$('refresh').addEventListener('click',()=>{refreshAll();loadBedrockUpdate(true)});$('reloadLogs').addEventListener('click',logs);$('logType').addEventListener('change',logs);$('updateLogButton').addEventListener('click',()=>{document.querySelector('[data-tab="logs"]').click();$('logType').value='update';logs()});$('logout').addEventListener('click',async()=>{try{await api('logout',{method:'POST',headers:{'X-CSRF-Token':csrf}})}finally{location.reload()}});api('session').then(d=>{if(d.authenticated){csrf=d.csrf;showApp()}}).catch(()=>{});setInterval(()=>{if(!$('app').hidden)status()},15000);
+$('loginForm').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api('login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});csrf=d.csrf;$('password').value='';txt('loginError','');showApp()}catch(e){txt('loginError',e.message)}});document.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>action(b.dataset.action)));document.querySelectorAll('[data-tab]').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.remove('selected'));a.classList.add('selected');document.querySelectorAll('.tab').forEach(x=>x.hidden=x.id!==a.dataset.tab);txt('pageTitle',({overview:'Serverübersicht',update:'Minecraft-Updates','panel-update':'Panel-Updates',worlds:'Welten-Manager',addons:'Add-on Manager',settings:'Server-Einstellungen',console:'Live-Konsole',monitor:'Live-Servermonitoring',players:'Spielerverwaltung',backups:'Backup-Verwaltung',logs:'Systemprotokolle'})[a.dataset.tab]);if(a.dataset.tab==='panel-update')loadPanelRelease();if(a.dataset.tab==='logs')logs();if(a.dataset.tab==='backups')backups();if(a.dataset.tab==='addons')loadAddons();if(a.dataset.tab==='settings')loadProperties();if(a.dataset.tab==='worlds')loadWorlds();if(a.dataset.tab==='console')loadConsole();if(a.dataset.tab==='overview')loadDashboardAlerts();if(a.dataset.tab==='monitor')loadMonitoring();if(a.dataset.tab==='players'){status();loadPlayers();loadOnlinePlayers()}}));$('refresh').addEventListener('click',()=>{refreshAll();loadBedrockUpdate(true)});$('reloadLogs').addEventListener('click',logs);$('logType').addEventListener('change',()=>{$('jobHistory').value='';logs()});$('jobHistory').addEventListener('change',()=>{$('logType').value=$('jobHistory').selectedOptions[0].dataset.type||'update';logs()});$('updateLogButton').addEventListener('click',()=>{document.querySelector('[data-tab="logs"]').click();$('logType').value='update';logs()});$('logout').addEventListener('click',async()=>{try{await api('logout',{method:'POST',headers:{'X-CSRF-Token':csrf}})}finally{location.reload()}});api('session').then(d=>{if(d.authenticated){csrf=d.csrf;showApp()}}).catch(()=>{});setInterval(()=>{if(!$('app').hidden)status()},15000);
 
 let addonPacks=[];
 async function loadAddons(){const el=$('addonList');el.textContent='Lade Pakete ...';try{const d=await api('addons');addonPacks=d.packs||[];renderAddons()}catch(e){el.textContent='Fehler: '+e.message}}

@@ -4,7 +4,7 @@ DracoRock Control verwaltet einen **Minecraft Bedrock Dedicated Server auf Debia
 
 ## Version und Hauptfunktionen
 
-**DracoRock Control v3.1.0** ist der freigegebene Release-Stand dieses Branches. Das aktuelle GitHub-Stable-Release wird beim signierten Veröffentlichen gesondert erstellt. Die bisherige stabile Version ist v3.0.0.
+**DracoRock Control v3.4.0** wird auf dem Feature-Branch vorbereitet. Veröffentlichte stabile Pakete stehen unter [GitHub Releases](https://github.com/xDraconix/DracoRock-Control/releases/latest).
 
 ### Intelligentes Live-Monitoring und Dashboard-Warnungen
 
@@ -18,9 +18,12 @@ Unter **Installierte Version** zeigt das Dashboard die neueste stabile Linux-Bed
 
 Die grafische Identität aus v3.0.0 mit eigenem SVG-Logo, Petrol-Farben und kompatiblem Ed25519-Releaseformat bleibt erhalten.
 
-[Release Notes v3.1.0](docs/releases/v3.1.0.md) · [Release Notes v3.0.0](docs/releases/v3.0.0.md)
+[Release Notes v3.4.0](docs/releases/v3.4.0.md) · [Release Notes v3.3.1](docs/releases/v3.3.1.md)
 
-## Neu in der Entwicklung: Monitoring 2.8.0
+<details>
+<summary>Historische Entwicklungs- und Upgradehinweise bis v2.8.0</summary>
+
+## Monitoring 2.8.0
 
 Der neue Menüpunkt **Live-Monitoring** bietet historische Diagramme für die Minecraft-Dienst-CPU (100 % = ein belegter CPU-Kern), den Dienst-RAM und die Zahl der Online-Spieler. Ein root-verwalteter systemd-Timer erhebt alle 60 Sekunden eine Messung, auch wenn der Browser geschlossen bleibt. Die Daten liegen in einer lokal geschützten SQLite-Datei unter `/var/lib/bedrock-control-pro/monitoring.sqlite3` und werden nach 30 Tagen automatisch entfernt. Die Anzeige bietet 1h, 6h, 24h, 7d und 30d. Messwerte können ausfallen; nicht verfügbare Werte werden **nicht als 0** dargestellt.
 
@@ -54,6 +57,8 @@ Bei signierten Updates wird ein strenger Installationsplan für Bedrock-Control-
 ## Neue Funktion in 2.5.5
 
 Im **Welten-Manager** werden der signierte 64-Bit-Weltseed aus Bedrocks `level.dat` sowie verfügbare Metadaten (Spielmodus, Schwierigkeit und Levelname) ausschließlich lesend angezeigt. Negative Seeds werden unterstützt und bleiben als Dezimalzeichenfolge unverändert; ein Kopieren-Button ist vorhanden. Nicht lesbare oder beschädigte Dateien werden als „Nicht verfügbar“ angezeigt. Die Funktion benötigt die aktualisierte Root-Komponente `bedrock-world-manager` und wird daher **nicht allein durch das Panel-Webupdate** installiert. Bei einer Neuinstallation oder einem Upgrade von v2.5.5 auf v2.6.0 den verifizierten Installer verwenden.
+
+</details>
 
 ## Funktionen
 

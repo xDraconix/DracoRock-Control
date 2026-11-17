@@ -193,6 +193,7 @@ done
 # Start the sampler only after its Python helper and the systemd units exist.
 systemctl daemon-reload
 systemctl enable --now bedrock-monitor.timer
+systemctl enable --now dracorock-backup.timer
 # Existing installations need the same narrowly scoped ACLs as new web setups.
 if [[ -f "$SERVER/server.properties" ]]; then
   /usr/local/sbin/bedrock-config-access
