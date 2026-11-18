@@ -67,7 +67,12 @@ with tempfile.TemporaryDirectory() as tmp:
         source = candidates[0].parent
     else:
         assert len(sys.argv) == 1
-        source = ROOT
+        source = root/'candidate'
+        # Earlier Python tests create ignored bytecode in the working tree.
+        # It is not shipped by git archive. Do not filter the ZIP-mode check:
+        # accidentally packaged bytecode must still be rejected by the gate.
+        shutil.copytree(ROOT/'system', source/'system', symlinks=True,
+                        ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
     with patch('subprocess.run', side_effect=run), \
          patch.object(pathlib.Path, 'is_dir', is_dir), \
          patch.object(pathlib.Path, 'stat', installed_stat):
