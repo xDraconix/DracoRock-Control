@@ -21,7 +21,7 @@ ALLOWED_SBIN = frozenset({
     'bedrock-panel-update-worker', 'bedrock-properties-manager',
     'bedrock-service-configure', 'bedrock-setup-control',
     'bedrock-setup-worker', 'bedrock-world-export-worker',
-    'bedrock-world-manager', 'bedrock-wait-port',
+    'bedrock-world-manager',
 })
 ALLOWED_BIN = frozenset({
     'bedrock-panel-apply-release', 'bedrock-panel-recovery',

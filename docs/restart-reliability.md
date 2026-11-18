@@ -6,7 +6,7 @@ recovering. Restart success requires a new service invocation, so the old
 running process cannot be mistaken for the completed restart. Explicit panel
 start/restart requests reset the rate-limit budget; automatic retries stay bounded.
 
-Before starting Bedrock, `bedrock-wait-port` checks whether the configured
+Before starting Bedrock, `bedrock-nethernet-check --wait-port` checks whether the configured
 `server-port` can actually be bound on the dual-stack TCP address. It waits up
 to 75 seconds for old listeners or TIME_WAIT connections to disappear. Merely
 checking for a listening process is insufficient. The existing NetherNet
