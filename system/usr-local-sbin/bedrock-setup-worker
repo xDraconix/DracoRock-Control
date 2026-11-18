@@ -39,7 +39,9 @@ python3 - "$CONFIG" <<'PYVALID'
 import json,sys,re
 with open(sys.argv[1]) as f: d=json.load(f)
 expected={'server_name','world_name','gamemode','difficulty','port','max_players'}
-assert set(d)==expected,'Unerwartete Konfigurationsschlüssel'
+assert set(d) in (expected,expected|{'world_seed'}),'Unerwartete Konfigurationsschlüssel'
+seed=d.get('world_seed','')
+assert isinstance(seed,str) and len(seed)<=128 and (not seed or seed.isprintable()),'Ungültiger World-Seed'
 for key in ('server_name','world_name'):
  v=d[key];assert isinstance(v,str) and 1<=len(v)<=64 and re.fullmatch(r'[A-Za-z0-9 _.-]+',v),key
 assert d['gamemode'] in ('survival','creative','adventure')
@@ -107,6 +109,7 @@ import json,sys
 with open(sys.argv[1]) as f:d=json.load(f)
 path=sys.argv[2]
 changes={'server-name':d['server_name'],'level-name':d['world_name'],'gamemode':d['gamemode'],'difficulty':d['difficulty'],'server-port':str(d['port']),'server-portv6':str(d['port']+1),'max-players':str(d['max_players'])}
+changes['level-seed']=d.get('world_seed','').strip()
 lines=open(path).readlines();seen=set();out=[]
 for line in lines:
  if '=' in line and not line.lstrip().startswith('#'):

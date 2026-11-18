@@ -147,17 +147,29 @@ def select(name):
     print(json.dumps({'ok':True,'selected':name,'restart_required':is_running(),
       'message':'Welt ausgewählt. '+('Bitte den Server manuell neu starten.' if is_running() else 'Sie wird beim nächsten manuellen Start geladen.')},ensure_ascii=False))
 
-def create(name):
+def create(name,seed=''):
     if not valid_name(name):fail('Ungültiger Weltname (1–80 Zeichen, keine Pfadzeichen)')
+    if not isinstance(seed,str) or len(seed)>128 or (seed and not seed.isprintable()):
+        fail('Ungültiger World-Seed (maximal 128 Zeichen, keine Steuerzeichen)')
+    seed=seed.strip()
     # Bedrock creates world data itself on next start. A directory is not pre-created.
     if (WORLDS/name).exists() or (WORLDS/name).is_symlink():fail('Weltname bereits vergeben')
     _,data=current()
     # New world creation uses level-name; no filesystem write under worlds needed.
-    select_new(name,data)
+    select_new(name,data,seed)
 
-def select_new(name,data):
+def select_new(name,data,seed=''):
     st=PROPS.stat()
     updated=re.sub(r'^level-name=.*\r?$',lambda _: 'level-name='+name,data,count=1,flags=re.M)
+    seed_pattern=r'^[ \t]*level-seed[ \t]*=.*$'
+    matches=re.findall(seed_pattern,updated,re.M)
+    if len(matches)>1:fail('level-seed darf nur einmal in server.properties vorkommen')
+    # Keep seeds as strings: JavaScript numbers would round large 64-bit values.
+    # Empty input must clear an old seed rather than reuse it for the new world.
+    if matches:
+        updated=re.sub(seed_pattern,lambda _: 'level-seed='+seed,updated,count=1,flags=re.M)
+    else:
+        updated+=('' if updated.endswith('\n') else '\n')+'level-seed='+seed+'\n'
     fd,tmp=tempfile.mkstemp(prefix='.server.properties-',dir=BASE)
     try:
         with os.fdopen(fd,'w',encoding='utf-8',newline='') as f:f.write(updated);f.flush();os.fsync(f.fileno())
@@ -296,7 +308,7 @@ def export_start(name,fmt):
 if __name__=='__main__':
     if len(sys.argv)==2 and sys.argv[1]=='list':listing()
     elif len(sys.argv)==3 and sys.argv[1]=='select':select(sys.argv[2])
-    elif len(sys.argv)==3 and sys.argv[1]=='create':create(sys.argv[2])
+    elif len(sys.argv) in (3,4) and sys.argv[1]=='create':create(sys.argv[2],sys.argv[3] if len(sys.argv)==4 else '')
     elif len(sys.argv)==4 and sys.argv[1]=='duplicate':duplicate(sys.argv[2],sys.argv[3])
     elif len(sys.argv)==3 and sys.argv[1]=='backup':backup(sys.argv[2])
     elif len(sys.argv)==4 and sys.argv[1]=='export-start':export_start(sys.argv[2],sys.argv[3])
