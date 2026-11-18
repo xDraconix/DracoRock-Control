@@ -27,26 +27,45 @@ finish() {
 }
 trap finish EXIT
 write_status running 'Systemd-Auftrag gestartet; warte auf Abschluss.' null
-# systemctl can block for several automatic NetherNet retries; keep polling in background.
-systemctl "$ACTION" mcbedrock.service &
-pid=$!
-start_time=$SECONDS
-while kill -0 "$pid" 2>/dev/null; do
-  if ((SECONDS-start_time>600)); then
-    write_status running 'Start dauert laenger als erwartet; systemd wird weiter ueberwacht.' null
-  else
-    case "$ACTION" in
-      stop) write_status running 'Minecraft wird kontrolliert gestoppt.' null ;;
-      *) write_status running 'Minecraft startet; NetherNet-Pruefung und automatische Wiederholungen laufen.' null ;;
-    esac
-  fi
-  sleep 3
-done
-wait "$pid"
-if [[ "$ACTION" == stop ]]; then
-  ! systemctl is-active --quiet mcbedrock.service || { echo 'Minecraft laeuft weiterhin' >&2; exit 1; }
-else
-  systemctl is-active --quiet mcbedrock.service || { echo 'Minecraft-Dienst nicht aktiv' >&2; exit 1; }
-  code="$(curl -sS --max-time 3 -o /dev/null -w '%{http_code}' http://127.0.0.1:19132/v1/join 2>/dev/null || true)"
-  [[ "$code" == 200 ]] || { echo 'NetherNet nicht bereit' >&2; exit 1; }
+# A blocking systemctl returns failure for the FIRST failed start, even when
+# Restart=on-failure has scheduled another attempt. Observe the unit instead.
+if [[ "$ACTION" != stop ]]; then
+  # An explicit user action gets a fresh retry budget. Automatic retries remain
+  # bounded by StartLimitBurst, so a broken server cannot restart endlessly.
+  systemctl reset-failed mcbedrock.service
 fi
+previous_invocation="$(systemctl show mcbedrock.service -p InvocationID --value)"
+systemctl --no-block "$ACTION" mcbedrock.service
+start_time=$SECONDS
+terminal_since=-1
+while ((SECONDS-start_time < 900)); do
+  state="$(systemctl show mcbedrock.service -p ActiveState --value)"
+  sub="$(systemctl show mcbedrock.service -p SubState --value)"
+  if [[ "$ACTION" == stop ]]; then
+    if [[ "$state" == inactive || "$state" == failed ]]; then
+      [[ "$(systemctl show mcbedrock.service -p MainPID --value)" == 0 ]] && exit 0
+    fi
+    write_status running 'Minecraft wird kontrolliert gestoppt (STOP-Frist 60 Sekunden).' null
+  else
+    # active is reached only AFTER the configured ExecStartPost readiness check.
+    if [[ "$state" == active && "$sub" == running ]]; then
+      current_invocation="$(systemctl show mcbedrock.service -p InvocationID --value)"
+      if [[ "$ACTION" != restart || "$current_invocation" != "$previous_invocation" ]]; then
+        exit 0
+      fi
+    fi
+    if [[ "$state" == failed || "$state" == inactive ]]; then
+      ((terminal_since >= 0)) || terminal_since=$SECONDS
+      if ((SECONDS-terminal_since >= 10)); then
+        systemctl status mcbedrock.service --no-pager >&2 || true
+        exit 1
+      fi
+    else
+      terminal_since=-1
+    fi
+    write_status running 'Minecraft startet; Portfreigabe, NetherNet-Pruefung und automatische Wiederholungen laufen.' null
+  fi
+  sleep 2
+done
+echo 'Zeitlimit der Statusueberwachung erreicht; systemd-Protokoll pruefen.' >&2
+exit 1

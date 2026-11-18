@@ -224,7 +224,14 @@ install -m 0644 "$ROOT/system/systemd/mcbedrock.service.d/bedrock-control-pro.co
 # The helper is also called by the web setup worker after it creates the unit.
 # Existing Minecraft services are not restarted during a panel upgrade.
 /usr/local/sbin/bedrock-service-configure
-printf '%s\n' 'Graceful-stop-Skript und TimeoutStopSec=150 installiert; Minecraft wurde NICHT neugestartet.'
+install -d -m 0755 /etc/logrotate.d
+install -m 0644 "$ROOT/system/logrotate/mcbedrock-console" /etc/logrotate.d/mcbedrock-console
+# Upgrade only the known SCREEN launch command; preserve custom start logic.
+if [[ -f "$SERVER/start_server.sh" ]] && grep -Fq '/usr/bin/screen -dmS mcbedrock ' "$SERVER/start_server.sh"; then
+  cp -a "$SERVER/start_server.sh" "$SERVER/start_server.sh.pre-bedrock-control-$(date +%Y%m%d-%H%M%S)"
+  sed -i 's@/usr/bin/screen -dmS mcbedrock @/usr/bin/screen -L -Logfile /var/log/mcbedrock/console.log -dmS mcbedrock @' "$SERVER/start_server.sh"
+fi
+printf '%s\n' 'STOP-Frist 60s, TimeoutStopSec=65 und NetherNet-Portprüfung installiert; Minecraft wurde NICHT neugestartet.'
 install -d -m 0750 -o www-data -g www-data /var/lib/bedrock-panel/uploads
 install -m 0440 -o root -g root "$ROOT/system/sudoers/bedrock-control-pro" /etc/sudoers.d/bedrock-control-pro
 visudo -cf /etc/sudoers.d/bedrock-control-pro >/dev/null
