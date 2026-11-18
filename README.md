@@ -4,9 +4,9 @@ DracoRock Control verwaltet einen **Minecraft Bedrock Dedicated Server auf Debia
 
 ## Version und Hauptfunktionen
 
-v3.5.2 macht das Update für unveränderte v3.5.0-Installationen kompatibel und behält die Neustartkorrekturen mit 60-Sekunden-STOP-Frist bei. Weltwiederherstellung, Backup-Zeitplan und die deutsche sowie englische Oberfläche aus v3.5.0 bleiben enthalten. Siehe [Release Notes v3.5.2](docs/releases/v3.5.2.md).
+v3.6.0 ergänzt optionale World-Seeds im Welten-Manager und bei der Standalone-Einrichtung. Die Sprachauswahl auf der Anmeldeseite steht unter dem Anmeldebutton in voller Formularbreite. Die kompatiblen Updates und Neustartkorrekturen aus v3.5.2 bleiben enthalten. Siehe [Release Notes v3.6.0](docs/releases/v3.6.0.md).
 
-**DracoRock Control v3.5.2** ist der aktuelle Quellcode-Stand. Veröffentlichte stabile Pakete stehen unter [GitHub Releases](https://github.com/xDraconix/DracoRock-Control/releases/latest).
+**DracoRock Control v3.6.0** ist der aktuelle Quellcode-Stand. Veröffentlichte stabile Pakete stehen unter [GitHub Releases](https://github.com/xDraconix/DracoRock-Control/releases/latest).
 
 ### Intelligentes Live-Monitoring und Dashboard-Warnungen
 

@@ -582,6 +582,7 @@ dialog::backdrop{background:#000b}
 .restore-confirm{display:flex;gap:.7rem;align-items:start}
 .language-label{display:flex;align-items:center;gap:.5rem;font-size:.8rem}
 .language-select{width:auto}
+.loginbox .language-label,.loginbox .language-select{width:100%;min-width:0}
 .headright{flex-wrap:wrap}
 .actions{align-items:center}
 .actions>label{margin:0;align-self:center}

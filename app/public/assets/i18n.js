@@ -108,7 +108,7 @@
  "Content-Type": "Content-Type",
  "DRACOROCK": "DRACOROCK",
  "DRACOROCK / BEDROCK MANAGEMENT": "DRACOROCK / BEDROCK MANAGEMENT",
- "DRACOROCK CONTROL v3.5.2 · Lokale Installation · Nur für autorisierte Administratoren": "DRACOROCK CONTROL v3.5.2 · Local installation · Authorized administrators only",
+ "DRACOROCK CONTROL v3.6.0 · Lokale Installation · Nur für autorisierte Administratoren": "DRACOROCK CONTROL v3.6.0 · Local installation · Authorized administrators only",
  "Debian · Apache · PHP": "Debian · Apache · PHP",
  "Dein Update-Skript ermittelt die neueste offizielle Linux-Version selbstständig, erstellt eine Sicherung und aktualisiert den Server.": "Your update script finds the latest official Linux version, creates a backup and updates the server.",
  "Der Auftrag konnte innerhalb von 30 Minuten nicht bestätigt werden. Bitte Protokoll prüfen.": "The job could not be confirmed within 30 minutes. Please check the log.",
