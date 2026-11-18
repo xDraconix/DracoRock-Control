@@ -1047,13 +1047,14 @@ async function worldExport(name,format){
   throw Error(tr('Export dauert zu lange. Bitte Protokoll prüfen.'));
  }catch(e){showNotice(e.message,true)}
 }
-async function worldAction(action,name){
+async function worldAction(action,name,seed=''){
  const question=action==='backup'?'Welt "'+name+tr('" sichern? Der Server muss gestoppt sein.'):action==='create'?tr('Neue Welt "')+name+tr('" für den nächsten Start vorbereiten?'):'Welt "'+name+tr('" auswählen? Der Server wird NICHT automatisch neu gestartet.');
  if(!confirm(question))return;
- try{const r=await api('world-action',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({action,name})});showNotice(r.message||'Gespeichert');loadWorlds();if(action==='create')$('worldCreateForm').reset()}catch(e){showNotice(e.message,true)}
+ const payload={action,name};if(action==='create')payload.seed=seed;
+ try{const r=await api('world-action',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify(payload)});showNotice(r.message||'Gespeichert');loadWorlds();if(action==='create')$('worldCreateForm').reset()}catch(e){showNotice(e.message,true)}
 }
 $('reloadWorlds').addEventListener('click',loadWorlds);
-$('worldCreateForm').addEventListener('submit',e=>{e.preventDefault();const name=$('worldNewName').value.trim();if(name)worldAction('create',name)});
+$('worldCreateForm').addEventListener('submit',e=>{e.preventDefault();const name=$('worldNewName').value.trim();const seed=$('worldNewSeed').value.trim();if(name)worldAction('create',name,seed)});
 
 async function worldDuplicate(source,name){
  if(!confirm('Welt "'+source+tr('" nach "')+name+tr('" duplizieren? Minecraft muss gestoppt sein.')))return;
@@ -1114,7 +1115,7 @@ async function setupCheck(){
 }
 $('setupForm').addEventListener('submit',async e=>{
  e.preventDefault();
- const data={server_name:$('setupServer').value.trim(),world_name:$('setupWorld').value.trim(),gamemode:$('setupMode').value,difficulty:$('setupDifficulty').value,port:Number($('setupPort').value),max_players:Number($('setupPlayers').value)};
+ const data={server_name:$('setupServer').value.trim(),world_name:$('setupWorld').value.trim(),gamemode:$('setupMode').value,difficulty:$('setupDifficulty').value,port:Number($('setupPort').value),max_players:Number($('setupPlayers').value),world_seed:$('setupSeed').value.trim()};
  if(!confirm(tr('Minecraft Bedrock jetzt offiziell herunterladen und installieren?')))return;
  $('setupInstall').disabled=true;$('setupProgress').hidden=false;
  try{
