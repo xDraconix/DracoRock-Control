@@ -7,6 +7,8 @@ DROPIN=/etc/systemd/system/mcbedrock.service.d/nethernet-watchdog.conf
 [[ -f "$UNIT" ]] || { echo 'mcbedrock.service noch nicht vorhanden; überspringe Watchdog-Einbindung.'; exit 0; }
 [[ -x /usr/local/sbin/bedrock-nethernet-check ]] || { echo 'NetherNet-Watchdog fehlt.' >&2; exit 1; }
 install -d -m 0755 /etc/systemd/system/mcbedrock.service.d
+install -d -m 0750 -o mcserver -g mcserver /var/log/mcbedrock
+[[ -x /usr/local/sbin/bedrock-wait-port ]] || { echo 'NetherNet-Portprüfung fehlt.' >&2; exit 1; }
 # Separate drop-in: preserve the user's original unit and unrelated overrides.
 cat > "$DROPIN" <<'EOF'
 [Unit]
@@ -14,6 +16,8 @@ StartLimitIntervalSec=600
 StartLimitBurst=3
 
 [Service]
+ExecStartPre=/usr/local/sbin/bedrock-wait-port
+TimeoutStopSec=65
 ExecStartPost=/usr/local/sbin/bedrock-nethernet-check
 Restart=on-failure
 RestartSec=5

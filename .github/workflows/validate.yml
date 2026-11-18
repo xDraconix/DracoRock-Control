@@ -45,6 +45,10 @@ jobs:
           PY
       - name: Test scheduled backups and job history
         run: sudo python3 tests/test_maintenance.py
+      - name: Test service restart retries and port readiness
+        run: |
+          sudo python3 tests/test_service_worker.py
+          python3 tests/test_wait_port.py
       - name: Test world restore and configurable schedules
         run: sudo python3 tests/test_restore_schedule.py
       - name: Test language selection and translation
