@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+[[ $# -eq 0 || ( $# -eq 1 && "$1" == --wait-port ) ]] || { echo 'Aufruf: bedrock-nethernet-check [--wait-port]' >&2; exit 2; }
 PROPERTIES=/home/mcserver/minecraft_bedrock/server.properties
 STOP=/home/mcserver/minecraft_bedrock/stop_server.sh
 if [[ ! -f "$PROPERTIES" || ! -r "$PROPERTIES" ]]; then
@@ -12,6 +13,37 @@ if [[ ! "$PORT" =~ ^[0-9]+$ ]] || ((10#$PORT < 1 || 10#$PORT > 65535)); then
   exit 1
 fi
 PORT=$((10#$PORT))
+if [[ "${1:-}" == --wait-port ]]; then
+  # Keep the pre-start probe in an existing allowlisted helper so older
+  # installed updaters can accept this release without a trust bootstrap.
+  exec /usr/bin/python3 - "$PORT" <<'PY_WAIT_PORT'
+import errno
+import socket
+import sys
+import time
+
+port = int(sys.argv[1])
+deadline = time.monotonic() + 75
+waiting = False
+while True:
+    try:
+        # Do not use SO_REUSEADDR: test the address as Bedrock will bind it.
+        with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as probe:
+            probe.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+            probe.bind(('::', port))
+        print(f'[NetherNet] TCP-Port {port} ist zum Binden frei.', flush=True)
+        break
+    except OSError as exc:
+        if exc.errno != errno.EADDRINUSE:
+            raise
+        if not waiting:
+            print(f'[NetherNet] Warte auf TCP-Port {port} (Listener/TIME_WAIT, maximal 75s).', flush=True)
+            waiting = True
+        if time.monotonic() >= deadline:
+            raise SystemExit(f'[NetherNet] TCP-Port {port} weiterhin belegt; Start abgebrochen.')
+        time.sleep(1)
+PY_WAIT_PORT
+fi
 URL="http://127.0.0.1:${PORT}/v1/join"
 echo "[NetherNet] Warte maximal 90s auf Bereitschaft (Port ${PORT}) ..."
 SUCCESS_COUNT=0

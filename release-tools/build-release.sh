@@ -34,6 +34,9 @@ trap 'rm -f "$TMP"' EXIT
 git archive --format=zip --prefix="bedrock-control-pro-$VERSION-installer/" \
   --output="$TMP" HEAD
 unzip -tq "$TMP" >/dev/null
+# Test the actual archive with the oldest supported installed planner before
+# making it available for signing. New release code must not validate itself.
+python3 tests/test_upgrade_compatibility.py "$TMP"
 mv "$TMP" "$OUT"
 trap - EXIT
 printf 'Git-Commit: %s\n' "$(git rev-parse HEAD)"

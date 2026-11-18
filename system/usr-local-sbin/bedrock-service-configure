@@ -8,7 +8,6 @@ DROPIN=/etc/systemd/system/mcbedrock.service.d/nethernet-watchdog.conf
 [[ -x /usr/local/sbin/bedrock-nethernet-check ]] || { echo 'NetherNet-Watchdog fehlt.' >&2; exit 1; }
 install -d -m 0755 /etc/systemd/system/mcbedrock.service.d
 install -d -m 0750 -o mcserver -g mcserver /var/log/mcbedrock
-[[ -x /usr/local/sbin/bedrock-wait-port ]] || { echo 'NetherNet-Portprüfung fehlt.' >&2; exit 1; }
 # Separate drop-in: preserve the user's original unit and unrelated overrides.
 cat > "$DROPIN" <<'EOF'
 [Unit]
@@ -16,12 +15,19 @@ StartLimitIntervalSec=600
 StartLimitBurst=3
 
 [Service]
-ExecStartPre=/usr/local/sbin/bedrock-wait-port
+ExecStartPre=/usr/local/sbin/bedrock-nethernet-check --wait-port
 TimeoutStopSec=65
 ExecStartPost=/usr/local/sbin/bedrock-nethernet-check
 Restart=on-failure
 RestartSec=5
 EOF
+# Migrate the exact pre-start line from the 3.5.1 live repair, if present.
+# Preserve all other locally configured service overrides.
+LEGACY=/etc/systemd/system/mcbedrock.service.d/restart-reliability.conf
+if [[ -f "$LEGACY" ]] && grep -qx 'ExecStartPre=/usr/local/sbin/bedrock-wait-port' "$LEGACY"; then
+  cp -a "$LEGACY" "$LEGACY.pre-v352-$(date +%Y%m%d-%H%M%S)"
+  sed -i '\@^ExecStartPre=/usr/local/sbin/bedrock-wait-port$@d' "$LEGACY"
+fi
 systemctl daemon-reload
 if ! systemctl show mcbedrock.service -p ExecStartPost --value | grep -Fq '/usr/local/sbin/bedrock-nethernet-check'; then
   echo 'FEHLER: Watchdog nicht in effektiver systemd-Konfiguration gefunden.' >&2
